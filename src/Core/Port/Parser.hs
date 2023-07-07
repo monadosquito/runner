@@ -8,4 +8,4 @@ import Data.Proxy
 
 
 class Parser p where
-    parseTrackName :: Proxy p -> ByteString -> TrackName
+    parseConfiguration :: Proxy p -> ByteString -> Configuration

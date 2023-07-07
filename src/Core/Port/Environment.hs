@@ -8,4 +8,6 @@ import Data.Proxy
 
 
 class Environment e where
-    getPreferences :: Proxy e -> (ByteString -> TrackName) -> IO Preferences
+    getConfiguration :: Proxy e
+                     -> (ByteString -> Configuration)
+                     -> IO Configuration

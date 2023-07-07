@@ -37,7 +37,8 @@ track smart constructor effects
 
 options
 
-|Option                 |Default value         |Command option          |Configuration key|Description                   |
-|-----------------------|----------------------|------------------------|-----------------|------------------------------|
-|Configuration file path|`"configuration.json"`|`--configuration` (`-c`)|-                |a configuration file path     |
-|Track name             |`"default"`           |`--track-name` (`-t`)   |`trackName`      |a name of a track to interpret|
+|Option                 |Default value         |Command option          |Configuration key|Description                                                    |
+|-----------------------|----------------------|------------------------|-----------------|---------------------------------------------------------------|
+|Configuration file path|`"configuration.json"`|`--configuration` (`-c`)|-                |a configuration file path                                      |
+|Track name             |`"default"`           |`--track-name` (`-t`)   |`trackName`      |a name of a track to interpret                                 |
+|Track width            |`5`                   |`--track-width` (`-w`)  |`trackWidth`     |a number of the `Core.Track.Cell` values in a single track line|

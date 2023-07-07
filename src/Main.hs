@@ -2,7 +2,6 @@
 
 
 import Core.Port.Renderer
-import Core.Track.Track
 
 import Driver.Renderer.Cnsl
 
@@ -22,13 +21,17 @@ import Data.Map.NonEmpty
 
 import Core.Configuration.Configuration
 
+import Core.Track.Configuration.Configuration
+
 
 main :: IO ()
 main = do
     gen <- newStdGen
-    prefs <- getPreferences (Proxy @Sys) . parseTrackName $ Proxy @Aeson
-    run gen prefs . render $ Proxy @Cnsl
+    conf <- getConfiguration (Proxy @Sys) . parseConfiguration $ Proxy @Aeson
+    run gen conf . render $ Proxy @Cnsl
   where
-    run gen prefs flow = do
-        let track = tracks' ! _trackName prefs
-        flow . List.reverse $ interpret gen track
+    run gen conf flow = do
+        let track = tracks' ! _trackName (_preferences conf)
+            trackCells = List.reverse $ interpret gen track
+            interpret = configure $ _options conf
+        flow trackCells
