@@ -16,6 +16,8 @@ type TrackWidth = Natural
 
 type TrackPieceCapacity = Natural
 
+type TrackDifficultyLevel = Natural
+
 
 data Configuration = Configuration { _preferences :: Preferences
                                    , _options :: Options
@@ -27,6 +29,7 @@ data Preferences = Preferences { _trackName :: TrackName
                                }
 
 data Options = Options { _trackWidth :: TrackWidth
+                       , _trackDifficultyLevel :: TrackDifficultyLevel
                        }
 
 
@@ -48,4 +51,6 @@ defaultConfiguration = Configuration { _preferences = defaultPreferences
 
 defaultOptions :: Options
 defaultOptions = Options { _trackWidth = 5
+                         , _trackDifficultyLevel = _trackWidth defaultOptions
+                                                 `div` 2
                          }

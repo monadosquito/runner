@@ -8,7 +8,7 @@ import Core.Track.Track
 
 import Control.Lens
 import Control.Monad.Reader
-import Control.Monad.State
+import qualified Control.Monad.State as State
 import System.Random
 import Data.List.NonEmpty
 
@@ -18,4 +18,4 @@ configure options' generator' track = runReader initialise options' ^. cells
   where
     initialise = do
          generationState <- initialGenerationState generator'
-         execStateT (interpret' track) generationState
+         State.execStateT (interpret' track) generationState

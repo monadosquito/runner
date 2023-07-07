@@ -18,6 +18,8 @@ configuration file or as command arguments.
 
 ## Notes
 
+- A difficulty level must be a natural number from `0` to a track width,
+  otherwise it is a nearest boundary.
 - Options passed as arguments to the command overwrite ones read from a
   configuration file.
 - If a configuration file whose particular key is set to a value is present,
@@ -33,13 +35,58 @@ track smart constructor effects
 |-----------------|-------------------------------------------|
 |`part`           |A given number of track lines is generated.|
 
-## Table 2
+# Table 2
 
 options
 
-|Option                 |Default value         |Command option                 |Configuration key   |Description                                                    |
-|-----------------------|----------------------|-------------------------------|--------------------|---------------------------------------------------------------|
-|Configuration file path|`"configuration.json"`|`--configuration` (`-c`)       |-                   |a configuration file path                                      |
-|Track name             |`"default"`           |`--track-name` (`-t`)          |`trackName`         |a name of a track to interpret                                 |
-|Track piece capacity   |`10`                  |`--track-piece-capacity` (`-p`)|`trackPieceCapacity`|a number of track lines rendered at a time                     |
-|Track width            |`5`                   |`--track-width` (`-w`)         |`trackWidth`        |a number of the `Core.Track.Cell` values in a single track line|
+<table>
+    <tr>
+        <th>Option</th>
+        <th>Default value</th>
+        <th>Command option</th>
+        <th>Configuration key</th>
+        <th>Description</th>
+    </tr>
+    <tr>
+        <td>Configuration file path</td>
+        <td><code>"configuration.json"</code></td>
+        <td><code>--configuration</code> (<code>-c</code>)</td>
+        <td>-</td>
+        <td>a configuration file path</td>
+    </tr>
+    <tr>
+        <td>Track difficulty level</td>
+        <td><code>2</code></td>
+        <td><code>--track-difficulty-level</code> (<code>-d</code>)</td>
+        <td><code>trackDifficultyLevel</code></td>
+        <td>
+            a number defining a maximum number of
+            <code>Core.Track.Cell.Pass</code> values generated for a single
+            track line
+        </td>
+    <tr>
+        <td>Track name</td>
+        <td><code>"default"</code></td>
+        <td><code>--track-name</code> (<code>-t</code>)</td>
+        <td><code>trackName</code></td>
+        <td>a name of a track to interpret</td>
+    </tr>
+    </tr>
+    <tr>
+        <td>Track piece capacity</td>
+        <td><code>10</code></td>
+        <td><code>--track-piece-capacity</code> (<code>-p</code>)</td>
+        <td><code>trackPieceCapacity</code></td>
+        <td>a number of track lines rendered at a time</td>
+    </tr>
+    <tr>
+        <td>Track width</td>
+        <td><code>5</code></td>
+        <td><code>--track-width</code> (<code>-w</code>)</td>
+        <td><code>trackWidth</code></td>
+        <td>
+            a number of the <code>Core.Track.Cell</code> values in a single
+            track line
+        </td>
+    </tr>
+</table>

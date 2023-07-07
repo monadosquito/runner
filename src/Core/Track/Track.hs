@@ -33,7 +33,7 @@ type Track = Free Part ()
 newtype Boundaries = Boundaries {_un_ :: (Position, Position)}
 
 
-data Cell = Obstacle | TrailPart deriving Eq
+data Cell = Obstacle | TrailPart | Pass deriving Eq
 
 data GenerationState = GenerationState { _cells :: List.NonEmpty [Cell]
                                        , _generator :: StdGen
@@ -55,7 +55,7 @@ generateLine = do
                   . element (fromIntegral trailPartPosition')
                   .= TrailPart
             line <- (& element (fromIntegral trailPartPosition') .~ TrailPart)
-                 <$> lift generateObstacleLine
+                 <$> (lift generateObstacleLine >>= scatter Pass)
             cells %= (line List.<|)
         Nothing -> return ()
 
@@ -118,3 +118,30 @@ initialGenerationState :: StdGen -> Reader Options GenerationState
 initialGenerationState generator' = do
     startLine <- generateStartLine
     return $ GenerationState (pure startLine) generator'
+
+generatePassPosition :: StateT GenerationState (Reader Options) Position
+generatePassPosition = do
+    previousGenerator <- use generator
+    width <- asks _trackWidth
+    let (position, nextGenerator) = randomR (0 :: Int, fromIntegral $ width - 1)
+                                            previousGenerator
+    generator .= nextGenerator
+    return $ fromIntegral position
+
+scatter :: Cell -> [Cell] -> StateT GenerationState (Reader Options) [Cell]
+scatter cell line = do
+    difficultyLevel <- asks _trackDifficultyLevel
+    width <- asks _trackWidth
+    passPositions <- replicateM (fromIntegral $ width - difficultyLevel)
+                                generatePassPosition
+    return $ line & traversed
+                  . withIndex
+                  . filteredBy (_1
+                                . to ((`find` passPositions)
+                                      . (==)
+                                      . fromIntegral
+                                     )
+                                . _Just
+                               )
+                  <. _2
+                  .~ cell

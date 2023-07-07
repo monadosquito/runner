@@ -26,6 +26,9 @@ instance Parser Aeson where
                            *> dfltNotSetOpt "trackPieceCapacity"
                                             (preferences . trackPieceCapacity)
                                             _Integral
+                           *> dfltNotSetOpt "trackDifficultyLevel"
+                                            (options . trackDifficultyLevel)
+                                            _Integral
             dfltNotSetOpt optName optSetter optType
                 | Just optVal <- conf ^? key optName . optType
                 = optSetter .= optVal

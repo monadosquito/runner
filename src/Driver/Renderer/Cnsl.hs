@@ -16,6 +16,7 @@ newtype RndredTrackCell = RndredTrackCell Cell
 instance Show RndredTrackCell where
     show (RndredTrackCell Obstacle) = "="
     show (RndredTrackCell TrailPart) = "."
+    show (RndredTrackCell Pass) = ","
 
 newtype RndredTrackLines = RndredTrackLines (NonEmpty [Cell])
 instance Show RndredTrackLines where
