@@ -7,6 +7,11 @@
 - Add not `defaultTrack` ones into the `Core.Script.Track.tracks` list as
   tuples of their names and themselves.
 
+## Notes
+
+- A current difficulty level set within a particular track overwrites starting
+  one there.
+
 ## Hints
 
 - Create tracks under the `Core.Script.Track` module.
@@ -18,6 +23,7 @@ configuration file or as command arguments.
 
 ## Notes
 
+- A configured difficulty level is a starting one for all tracks.
 - A difficulty level must be a natural number from `0` to a track width,
   otherwise it is a nearest boundary.
 - Options passed as arguments to the command overwrite ones read from a
@@ -31,9 +37,10 @@ configuration file or as command arguments.
 
 track smart constructor effects
 
-|Smart constructor|Effect                                     |
-|-----------------|-------------------------------------------|
-|`part`           |A given number of track lines is generated.|
+|Smart constructor    |Effect                                                 |
+|---------------------|-------------------------------------------------------|
+|`part`               |A given number of track lines is generated.            |
+|`withDifficultyLevel`|A given track difficulty level is set as a current one.|
 
 # Table 2
 

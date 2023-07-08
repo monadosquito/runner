@@ -1,5 +1,6 @@
 module Core.Track ( Track.Track
                   , Track.part
+                  , Track.withDifficultyLevel
                   ) where
 
 

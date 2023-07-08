@@ -27,7 +27,9 @@ type PartLength = Natural
 
 type Position = Natural
 
-type Track = Free Part ()
+type Track = Free Track' ()
+
+type DifficultyLevel = Natural
 
 
 newtype Boundaries = Boundaries {_un_ :: (Position, Position)}
@@ -37,9 +39,12 @@ data Cell = Obstacle | TrailPart | Pass deriving Eq
 
 data GenerationState = GenerationState { _cells :: List.NonEmpty [Cell]
                                        , _generator :: StdGen
+                                       , _difficultyLevel :: DifficultyLevel
                                        }
 
-data Part next = Part PartLength next deriving Functor
+data Track' next = Part PartLength next
+                 | WithDifficultyLevel DifficultyLevel next
+                 deriving Functor
 
 
 makeFieldsNoPrefix ''GenerationState
@@ -91,6 +96,12 @@ interpret' (Pure _) = pure ()
 interpret' (Free (Part length' track))
     =
     Sequence.replicateA (fromIntegral length') generateLine *> interpret' track
+interpret' (Free (WithDifficultyLevel level track)) = do
+    maximumDifficultyLevel <- asks _trackWidth
+    difficultyLevel .= if level <= maximumDifficultyLevel
+                       then level
+                       else maximumDifficultyLevel
+    interpret' track
 
 selectNextTrailPartPosition :: StateT GenerationState (Reader Options)
                                                       (Maybe Position)
@@ -117,7 +128,10 @@ part length' = Free (Part length' (Pure ()))
 initialGenerationState :: StdGen -> Reader Options GenerationState
 initialGenerationState generator' = do
     startLine <- generateStartLine
-    return $ GenerationState (pure startLine) generator'
+    difficultyLevel' <- asks _trackDifficultyLevel
+    return $ GenerationState (pure startLine)
+                             generator'
+                             (fromIntegral difficultyLevel')
 
 generatePassPosition :: StateT GenerationState (Reader Options) Position
 generatePassPosition = do
@@ -130,9 +144,9 @@ generatePassPosition = do
 
 scatter :: Cell -> [Cell] -> StateT GenerationState (Reader Options) [Cell]
 scatter cell line = do
-    difficultyLevel <- asks _trackDifficultyLevel
+    difficultyLevel' <- use difficultyLevel
     width <- asks _trackWidth
-    passPositions <- replicateM (fromIntegral $ width - difficultyLevel)
+    passPositions <- replicateM (fromIntegral $ width - difficultyLevel')
                                 generatePassPosition
     return $ line & traversed
                   . withIndex
@@ -145,3 +159,6 @@ scatter cell line = do
                                )
                   <. _2
                   .~ cell
+
+withDifficultyLevel :: DifficultyLevel -> Track
+withDifficultyLevel level = Free (WithDifficultyLevel level (Pure ()))
