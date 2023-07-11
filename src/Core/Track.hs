@@ -7,6 +7,8 @@ module Core.Track ( Track.Track
                   , Track.eitherSequenceEnd
                   , Track.eitherSequenceWhere
                   , Track.withProbability
+                  , Track.withGradualDifficultyLevelSlope
+                  , Track.withSteepDifficultyLevelSlope
                   ) where
 
 

@@ -40,6 +40,10 @@ type AmountDifference = Amount'
 
 type Probability = Float
 
+type Rise = Difference
+
+type Run = PartLength
+
 
 newtype Boundaries = Boundaries {_un_ :: (Position, Position)}
 
@@ -50,7 +54,7 @@ data Cell = Obstacle | TrailPart | Pass deriving Eq
 
 data GenerationState = GenerationState { _cells :: List.NonEmpty [Cell]
                                        , _generator :: StdGen
-                                       , _difficultyLevel :: DifficultyLevel
+                                       , _difficulty :: Difficulty
                                        , _eitherSequences :: [Track]
                                        , _probabilities :: [Probability]
                                        }
@@ -72,10 +76,19 @@ data Condition = WithDifficultyLevel DifficultyLevel
                | WithDifficultyLevelAmount Amount
                | WithAmountAlteredDifficultyLevel Amount'
                | WithProbability Probability
+               | WithGradualDifficultyLevelSlope Rise Run
+               | WithSteepDifficultyLevelSlope
+
+data Difficulty = Difficulty { _level :: DifficultyLevel
+                             , _levelSlope :: Slope
+                             }
+
+data Slope = GradualSlope Rise Run | SteepSlope
 
 
 makeFieldsNoPrefix ''GenerationState
 makeFieldsNoPrefix ''Boundaries
+makeFieldsNoPrefix ''Difficulty
 
 
 generateLine :: StateT GenerationState (Reader Options) ()
@@ -171,16 +184,32 @@ interpret' (Free track) = do
     if null eitherSequences'
     then do
         case track of
-            Part length' _
-                ->
-                replicateM_ (fromIntegral length') generateLine
-            Condition (WithDifficultyLevel level) _ -> do
+            Part length' _ -> do
+                difficultyLevelSlope' <- use $ difficulty . levelSlope
+                case difficultyLevelSlope' of
+                    GradualSlope rise run -> do
+                        width <- asks _trackWidth
+                        if length' `div` run * fromIntegral rise <= width
+                        then do
+                            difficulty . levelSlope .= SteepSlope
+                            let piecesCount = fromIntegral $ length' `div` run
+                            interpret' . replicateM_ piecesCount $ do
+                                withAlteredDifficultyLevel rise
+                                part run
+                            difficulty . levelSlope .= difficultyLevelSlope'
+                        else do
+                            difficulty . levelSlope .= SteepSlope
+                            interpret' $ part length'
+                    SteepSlope
+                        ->
+                        replicateM_ (fromIntegral length') generateLine
+            Condition (WithDifficultyLevel level') _ -> do
                 maximumDifficultyLevel <- asks _trackWidth
-                difficultyLevel .= if level <= maximumDifficultyLevel
-                                   then level
-                                   else maximumDifficultyLevel
+                difficulty . level .= if level' <= maximumDifficultyLevel
+                                      then level'
+                                      else maximumDifficultyLevel
             Condition (WithAlteredDifficultyLevel difference) _ -> do
-                oldDifficultyLevel <- use difficultyLevel
+                oldDifficultyLevel <- use $ difficulty . level
                 let newDifficultyLevel = fromIntegral oldDifficultyLevel
                                        + difference
                 maximumDifficultyLevel <- fromIntegral <$> asks _trackWidth
@@ -197,9 +226,7 @@ interpret' (Free track) = do
                            . round
                            $ fromIntegral maximumDifficultyLevel
                            * amount'
-            Condition (WithAmountAlteredDifficultyLevel difference)
-                      _
-                -> do
+            Condition (WithAmountAlteredDifficultyLevel difference) _ -> do
                 maximumDifficultyLevel <- asks _trackWidth
                 interpret' . withAlteredDifficultyLevel
                            . round
@@ -207,6 +234,12 @@ interpret' (Free track) = do
                            * if | abs difference < 0 -> 0
                                 | abs difference > 1 -> 1
                                 | otherwise -> difference
+            Condition (WithGradualDifficultyLevelSlope rise run) _
+                ->
+                difficulty . levelSlope .= GradualSlope rise run
+            Condition WithSteepDifficultyLevelSlope _
+                ->
+                difficulty . levelSlope .= SteepSlope
     else eitherSequences . _head %= (*> Free (Pure () <$ track))
     interpret' $ _next track
 
@@ -238,7 +271,7 @@ initialGenerationState generator' = do
     difficultyLevel' <- asks _trackDifficultyLevel
     return $ GenerationState (pure startLine)
                              generator'
-                             (fromIntegral difficultyLevel')
+                             (Difficulty difficultyLevel' SteepSlope)
                              []
                              []
 
@@ -253,7 +286,7 @@ generatePassPosition = do
 
 scatter :: Cell -> [Cell] -> StateT GenerationState (Reader Options) [Cell]
 scatter cell line = do
-    difficultyLevel' <- use difficultyLevel
+    difficultyLevel' <- use $ difficulty . level
     width <- asks _trackWidth
     passPositions <- replicateM (fromIntegral $ width - difficultyLevel')
                                 generatePassPosition
@@ -270,9 +303,9 @@ scatter cell line = do
                   .~ cell
 
 withDifficultyLevel :: DifficultyLevel -> Track
-withDifficultyLevel level
+withDifficultyLevel level'
     =
-    Free (Condition (WithDifficultyLevel level) (Pure ()))
+    Free (Condition (WithDifficultyLevel level') (Pure ()))
 
 withAlteredDifficultyLevel :: Difference -> Track
 withAlteredDifficultyLevel difference
@@ -299,3 +332,13 @@ withProbability :: Probability -> Track
 withProbability probability
     =
     Free (Condition (WithProbability probability) (Pure ()))
+
+withGradualDifficultyLevelSlope :: Rise -> Run -> Track
+withGradualDifficultyLevelSlope rise run
+    =
+    Free (Condition (WithGradualDifficultyLevelSlope rise run) (Pure ()))
+
+withSteepDifficultyLevelSlope :: Track
+withSteepDifficultyLevelSlope
+    =
+    Free (Condition (WithSteepDifficultyLevelSlope) (Pure ()))
