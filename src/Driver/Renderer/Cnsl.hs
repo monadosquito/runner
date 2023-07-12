@@ -27,5 +27,5 @@ instance Show RndredTrackLines where
                ++ "\n"
                ++ concat (show . RndredTrackCell <$> trackLine)
               )
-              ""
+              "\ESC[2J"
               lines'

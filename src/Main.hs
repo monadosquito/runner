@@ -1,4 +1,5 @@
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE RecordWildCards #-}
 
 
 import Core.Port.Renderer
@@ -17,21 +18,48 @@ import Core.Script.Track
 import Driver.Environment.Sys
 import Driver.Parser.Aeson
 
-import Data.Map.NonEmpty
+import qualified Data.Map.NonEmpty as Map
 
 import Core.Configuration.Configuration
 
 import Core.Track.Configuration.Configuration
+
+import Control.Concurrent
+import Data.Foldable
+
+import Core.Track.Track
+
+
+data FlowInput = FlowInput { trackCells :: List.NonEmpty [Cell]
+                           , trackPiecesCnt :: Int
+                           , trackRem :: Maybe (List.NonEmpty [Cell])
+                           }
 
 
 main :: IO ()
 main = do
     gen <- newStdGen
     conf <- getConfiguration (Proxy @Sys) . parseConfiguration $ Proxy @Aeson
-    run gen conf . render $ Proxy @Cnsl
+    run gen conf $ \FlowInput {..} -> do
+        forM_ [0..trackPiecesCnt - 1] $ \ix -> do
+            rndrTrackPiece ix trackCells
+            threadDelay 1000000
+        rndr trackRem
   where
     run gen conf flow = do
-        let track = tracks' ! _trackName (_preferences conf)
-            trackCells = List.reverse $ interpret gen track
-            interpret = configure $ _options conf
-        flow trackCells
+        let track = tracks' Map.! _trackName (_preferences conf)
+            trackCells = List.reverse $ interpret'' gen track
+            interpret'' = configure $ _options conf
+            trackPiecesCnt = List.length trackCells `div` trackPieceCap
+            trackRem = List.nonEmpty
+                     $ List.drop (trackPieceCap * trackPiecesCnt) trackCells
+        flow FlowInput {..}
+    rndr (Just trackPiece) = render (Proxy @Cnsl) trackPiece
+    rndr Nothing = pure ()
+    rndrTrackPiece ix' cells' = do
+        let trackPiece = take trackPieceCap
+                       $ List.drop (ix' * trackPieceCap) cells'
+        rndr $ List.nonEmpty trackPiece
+
+trackPieceCap :: Int
+trackPieceCap = 10
