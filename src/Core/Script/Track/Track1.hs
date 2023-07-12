@@ -18,3 +18,5 @@ track1 = eitherSequenceWhere
        *> withAmountAlteredDifficultyLevel 0.5
        *> withSteepDifficultyLevelSlope
        *> part 10
+       *> infiniteTailWhere
+       *> part 10

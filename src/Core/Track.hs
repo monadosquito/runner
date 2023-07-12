@@ -10,6 +10,7 @@ module Core.Track ( Track.Track
                   , Track.withGradualDifficultyLevelSlope
                   , Track.withSteepDifficultyLevelSlope
                   , Track.withGradualDifficultyLevelAmountRiseSlope
+                  , Track.infiniteTailWhere
                   ) where
 
 

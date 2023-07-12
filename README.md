@@ -48,6 +48,7 @@ track smart constructor effects
 |-------------------------------------------|----------------------------------------------------------------------------------------------------------------------|
 |`eitherSequenceEnd`                        |One of track sequences prepended with the `eitherSequenceWhere` smart constructor is generated.                       |
 |`eitherSequenceWhere`                      |A following track sequence up to the same or `eitherSequenceEnd` smart constructor can be selected to be generated.   |
+|`infiniteTailWhere`                        |A following track sequence is repeated infinitely.                                                                    |
 |`part`                                     |A given number of track lines is generated.                                                                           |
 |`withAlteredDifficultyLevel`               |A given integer is added to a current difficulty level.                                                               |
 |`withAmountAlteredDifficultyLevel`         |A given maximum difficulty level amount is added to a current difficulty level.                                       |

@@ -57,6 +57,7 @@ data GenerationState = GenerationState { _cells :: List.NonEmpty [Cell]
                                        , _difficulty :: Difficulty
                                        , _eitherSequences :: [Track]
                                        , _probabilities :: [Probability]
+                                       , _cycle' :: Track
                                        }
 
 data Track' next = Part { _partLength :: PartLength
@@ -65,10 +66,11 @@ data Track' next = Part { _partLength :: PartLength
                  | Condition { _condition :: Condition
                              , _next :: next
                              }
-                 | EitherSequenceEnd { _next :: next
-                                     }
-                 | EitherSequenceWhere { _next :: next
-                                       }
+                 | SequenceEnd { _next :: next
+                               }
+                 | Sequence { _sequence :: Sequence
+                            , _next :: next
+                            }
                  deriving Functor
 
 data Condition = WithDifficultyLevel DifficultyLevel
@@ -85,6 +87,8 @@ data Difficulty = Difficulty { _level :: DifficultyLevel
                              }
 
 data Slope = GradualSlope Rise Run | SteepSlope
+
+data Sequence = EitherSequenceWhere | InfiniteTailWhere
 
 
 makeFieldsNoPrefix ''GenerationState
@@ -125,8 +129,8 @@ getShiftBoundaries position = do
              then Boundaries (position - 1, position)
              else Boundaries (position - 1, position + 1)
 
-interpret :: StdGen -> Track -> List.NonEmpty [Cell]
-interpret generator' track = _cells $ runReader initialise defaultOptions
+interpret :: StdGen -> Track -> GenerationState
+interpret generator' track = runReader initialise defaultOptions
   where
     initialise = do
          generationState <- initialGenerationState generator'
@@ -134,7 +138,7 @@ interpret generator' track = _cells $ runReader initialise defaultOptions
 
 interpret' :: Track -> StateT GenerationState (Reader Options) ()
 interpret' (Pure _) = pure ()
-interpret' (Free (EitherSequenceEnd track)) = do
+interpret' (Free (SequenceEnd track)) = do
     eitherSequences' <- use eitherSequences
     eitherSequences .= []
     previousGenerator <- use generator
@@ -174,7 +178,7 @@ interpret' (Free (EitherSequenceEnd track)) = do
         generator .= nextGenerator
         interpret' $ eitherSequences' !! eitherSequenceIndex
     interpret' track
-interpret' (Free (EitherSequenceWhere track)) = do
+interpret' (Free (Sequence EitherSequenceWhere track)) = do
     eitherSequences %= (Pure () :)
     interpret' track
 interpret' (Free (Condition (WithProbability probability') track)) = do
@@ -246,6 +250,7 @@ interpret' (Free track) = do
                 maximumDifficultyLevel <- asks _trackWidth
                 let rise' = round $ fromIntegral maximumDifficultyLevel * rise
                 interpret' $ withGradualDifficultyLevelSlope rise' run
+            Sequence InfiniteTailWhere _ -> cycle' .= Free track
     else eitherSequences . _head %= (*> Free (Pure () <$ track))
     interpret' $ _next track
 
@@ -280,6 +285,7 @@ initialGenerationState generator' = do
                              (Difficulty difficultyLevel' SteepSlope)
                              []
                              []
+                             (Pure ())
 
 generatePassPosition :: StateT GenerationState (Reader Options) Position
 generatePassPosition = do
@@ -329,10 +335,10 @@ withAmountAlteredDifficultyLevel difference
     Free (Condition (WithAmountAlteredDifficultyLevel difference) (Pure ()))
 
 eitherSequenceEnd :: Track
-eitherSequenceEnd = Free (EitherSequenceEnd (Pure ()))
+eitherSequenceEnd = Free (SequenceEnd (Pure ()))
 
 eitherSequenceWhere :: Track
-eitherSequenceWhere = Free (EitherSequenceWhere (Pure ()))
+eitherSequenceWhere = Free (Sequence EitherSequenceWhere (Pure ()))
 
 withProbability :: Probability -> Track
 withProbability probability
@@ -357,3 +363,11 @@ withGradualDifficultyLevelAmountRiseSlope rise run
                     )
                     (Pure ())
          )
+
+infiniteTailWhere :: Track
+infiniteTailWhere = Free (Sequence InfiniteTailWhere (Pure ()))
+
+interpretFrom :: GenerationState -> Track -> GenerationState
+interpretFrom generationState track = runReader initialise defaultOptions
+  where
+    initialise = execStateT (interpret' track) generationState

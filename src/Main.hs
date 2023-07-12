@@ -1,5 +1,6 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE FlexibleContexts #-}
 
 
 import Core.Port.Renderer
@@ -27,14 +28,24 @@ import Core.Track.Configuration.Configuration
 import Control.Concurrent
 import Data.Foldable
 import Control.Lens
+import Control.Monad
+import Control.Monad.Free
+import Data.IORef
+import qualified Lens.List.NonEmpty as List
 
 import Core.Track.Track
 
 
-data FlowInput = FlowInput { trackCells :: List.NonEmpty [Cell]
+data FlowInput = FlowInput { trackCells :: Maybe (List.NonEmpty [Cell])
                            , trackPiecesCnt
-                           , trackPieceCap :: Int
+                           , trackPieceCap
+                           , trackCycleLen :: Int
                            , trackRem :: Maybe (List.NonEmpty [Cell])
+                           , interpretFrom' :: GenerationState
+                                            -> Track
+                                            -> GenerationState
+                           , trackGenState :: GenerationState
+                           , trackGenStateRef :: IORef GenerationState
                            }
 
 
@@ -47,21 +58,58 @@ main = do
             rndrTrackPiece ix' trackPieceCap trackCells
             threadDelay 1000000
         rndr trackRem
+        when (trackCycleLen > 0) . forever $ do
+            let trackCyclePiecesCnt = trackCycleLen `div` trackPieceCap
+            forM_ [0..trackCyclePiecesCnt - 1] $ \ix' -> do
+                trackCycle' <- genTrackCycle interpretFrom'
+                                             trackGenState
+                                             trackGenStateRef
+                rndrTrackPiece ix' trackPieceCap trackCycle'
+                threadDelay 1000000
+            rndr trackRem
   where
     run gen conf flow = do
         let track = tracks' Map.! _trackName (_preferences conf)
-            trackCells = List.reverse $ interpret'' gen track
+            trackCells = Just rvsTrackCells
             interpret'' = configure $ _options conf
-            trackPiecesCnt = List.length trackCells `div` trackPieceCap
+            trackPiecesCnt = List.length (_cells trackGenState)
+                           `div` trackPieceCap
             trackRem = List.nonEmpty
-                     $ List.drop (trackPieceCap * trackPiecesCnt) trackCells
+                     $ List.drop (trackPieceCap * trackPiecesCnt)
+                                 rvsTrackCells
             trackPieceCap = conf
                           ^. preferences
                           . trackPieceCapacity
                           . to fromIntegral
+            interpretFrom' = configureFrom $ _options conf
+            rvsTrackCells = trackGenState ^. cells . reversed
+            trackGenState = interpret'' gen track
+        let trackCycleLen = trackGenState
+                          ^? cycle'
+                          . _Free
+                          . to (interpret gen . Free)
+                          . cells
+                          . to List.length
+                          ^. non 0
+        trackGenStateRef <- newIORef trackGenState
         flow FlowInput {..}
     rndr (Just trackPiece) = render (Proxy @Cnsl) trackPiece
     rndr Nothing = pure ()
-    rndrTrackPiece ix' cap cells' = do
-        let trackPiece = take cap $ List.drop (ix' * cap) cells'
-        rndr $ List.nonEmpty trackPiece
+    rndrTrackPiece ix' cap (Just cells') = do
+        let trackPiece = List.nonEmpty . take cap $ List.drop (ix' * cap) cells'
+        rndr trackPiece
+    rndrTrackPiece _ _ Nothing = return ()
+    genTrackCycle interpretFrom' trackGenState trackGenStateRef = do
+        gen' <- newStdGen
+        trackStartLine <- (^. cells . List._head)
+                       <$> readIORef trackGenStateRef
+        let contTrackGenState = trackGenState & cells .~ pure trackStartLine
+                                              & generator .~ gen'
+            newTrackGenState = interpretFrom' contTrackGenState
+                                              $ _cycle' trackGenState
+        writeIORef trackGenStateRef newTrackGenState
+        return $ newTrackGenState
+               ^. cells
+               . List._tail
+               . reversed
+               . to List.nonEmpty
