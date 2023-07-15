@@ -12,9 +12,13 @@ import qualified Control.Monad.State as State
 import System.Random
 import Data.List.NonEmpty
 
+import qualified Core.Configuration.Configuration as Configuration
 
-configure :: Options -> StdGen -> Track -> NonEmpty [Cell]
-configure options' generator' track = runReader initialise options' ^. cells
+
+configure :: Configuration.Options -> StdGen -> Track -> NonEmpty [Cell]
+configure options' generator' track = runReader initialise
+                                                (Configuration.fix options')
+                                    ^. cells
   where
     initialise = do
          generationState <- initialGenerationState generator'

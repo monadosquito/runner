@@ -1,6 +1,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE RecordWildCards #-}
 
 
 module Core.Configuration.Configuration where
@@ -54,3 +55,13 @@ defaultOptions = Options { _trackWidth = 5
                          , _trackDifficultyLevel = _trackWidth defaultOptions
                                                  `div` 2
                          }
+
+fix :: Options -> Options
+fix options'@Options {..}
+    =
+    options' { _trackDifficultyLevel = trackDifficultyLevel'
+             }
+  where
+    trackDifficultyLevel' = if _trackDifficultyLevel > _trackWidth
+                            then defaultOptions ^. trackDifficultyLevel
+                            else _trackDifficultyLevel
