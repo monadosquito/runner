@@ -18,7 +18,6 @@ import Data.List
 import Numeric.Natural
 import System.Random
 import qualified Data.List.NonEmpty as List
-import qualified Data.Sequence as Sequence
 
 import Core.Configuration.Configuration
 import Control.Monad.Reader
@@ -47,10 +46,19 @@ data Cell = Obstacle | TrailPart | Pass deriving Eq
 data GenerationState = GenerationState { _cells :: List.NonEmpty [Cell]
                                        , _generator :: StdGen
                                        , _difficultyLevel :: DifficultyLevel
+                                       , _eitherSequences :: [Track]
                                        }
 
-data Track' next = Part PartLength next
-                 | Condition Condition next
+data Track' next = Part { _partLength :: PartLength
+                        , _next :: next
+                        }
+                 | Condition { _condition :: Condition
+                             , _next :: next
+                             }
+                 | EitherSequenceEnd { _next :: next
+                                     }
+                 | EitherSequenceWhere { _next :: next
+                                       }
                  deriving Functor
 
 data Condition = WithDifficultyLevel DifficultyLevel
@@ -105,45 +113,64 @@ interpret generator' track = _cells $ runReader initialise defaultOptions
 
 interpret' :: Track -> StateT GenerationState (Reader Options) ()
 interpret' (Pure _) = pure ()
-interpret' (Free (Part length' track))
-    =
-    Sequence.replicateA (fromIntegral length') generateLine *> interpret' track
-interpret' (Free (Condition (WithDifficultyLevel level) track)) = do
-    maximumDifficultyLevel <- asks _trackWidth
-    difficultyLevel .= if level <= maximumDifficultyLevel
-                       then level
-                       else maximumDifficultyLevel
+interpret' (Free (EitherSequenceEnd track)) = do
+    eitherSequences' <- use eitherSequences
+    eitherSequences .= []
+    previousGenerator <- use generator
+    let (eitherSequenceIndex, nextGenerator) = randomR (0
+                                                       , length eitherSequences'
+                                                         - 1
+                                                       )
+                                                       previousGenerator
+    generator .= nextGenerator
+    interpret' $ eitherSequences' !! eitherSequenceIndex
     interpret' track
-interpret' (Free (Condition (WithAlteredDifficultyLevel difference) track)) = do
-    oldDifficultyLevel <- use difficultyLevel
-    let newDifficultyLevel = fromIntegral oldDifficultyLevel + difference
-    maximumDifficultyLevel <- fromIntegral <$> asks _trackWidth
-    interpret' $ do
-        withDifficultyLevel . fromIntegral
-                            $ if | newDifficultyLevel < 0 -> 0
-                                 | newDifficultyLevel > maximumDifficultyLevel
-                                 -> maximumDifficultyLevel
-                                 | otherwise -> newDifficultyLevel
-        track
-interpret' (Free (Condition (WithDifficultyLevelAmount amount') track)) = do
-    maximumDifficultyLevel <- asks _trackWidth
-    interpret' $ do
-        withDifficultyLevel . round
-                            $ fromIntegral maximumDifficultyLevel * amount'
-        track
-interpret' (Free (Condition (WithAmountAlteredDifficultyLevel difference)
-                            track
-                 )
-           )
-           = do
-    maximumDifficultyLevel <- asks _trackWidth
-    interpret' $ do
-        withAlteredDifficultyLevel . round
-                                   $ fromIntegral maximumDifficultyLevel
-                                   * if | abs difference < 0 -> 0
-                                        | abs difference > 1 -> 1
-                                        | otherwise -> difference
-        track
+interpret' (Free (EitherSequenceWhere track)) = do
+    eitherSequences %= (Pure () :)
+    interpret' track
+interpret' (Free track) = do
+    eitherSequences' <- use eitherSequences
+    if null eitherSequences'
+    then do
+        case track of
+            Part length' _
+                ->
+                replicateM_ (fromIntegral length') generateLine
+            Condition (WithDifficultyLevel level) _ -> do
+                maximumDifficultyLevel <- asks _trackWidth
+                difficultyLevel .= if level <= maximumDifficultyLevel
+                                   then level
+                                   else maximumDifficultyLevel
+            Condition (WithAlteredDifficultyLevel difference) _ -> do
+                oldDifficultyLevel <- use difficultyLevel
+                let newDifficultyLevel = fromIntegral oldDifficultyLevel
+                                       + difference
+                maximumDifficultyLevel <- fromIntegral <$> asks _trackWidth
+                interpret' $ do
+                    withDifficultyLevel . fromIntegral
+                                        $ if | newDifficultyLevel < 0 -> 0
+                                             | newDifficultyLevel
+                                               > maximumDifficultyLevel
+                                             -> maximumDifficultyLevel
+                                             | otherwise -> newDifficultyLevel
+            Condition (WithDifficultyLevelAmount amount') _ -> do
+                maximumDifficultyLevel <- asks _trackWidth
+                interpret' . withDifficultyLevel
+                           . round
+                           $ fromIntegral maximumDifficultyLevel
+                           * amount'
+            Condition (WithAmountAlteredDifficultyLevel difference)
+                      _
+                -> do
+                maximumDifficultyLevel <- asks _trackWidth
+                interpret' . withAlteredDifficultyLevel
+                           . round
+                           $ fromIntegral maximumDifficultyLevel
+                           * if | abs difference < 0 -> 0
+                                | abs difference > 1 -> 1
+                                | otherwise -> difference
+    else eitherSequences . _head %= (*> Free (Pure () <$ track))
+    interpret' $ _next track
 
 selectNextTrailPartPosition :: StateT GenerationState (Reader Options)
                                                       (Maybe Position)
@@ -174,6 +201,7 @@ initialGenerationState generator' = do
     return $ GenerationState (pure startLine)
                              generator'
                              (fromIntegral difficultyLevel')
+                             []
 
 generatePassPosition :: StateT GenerationState (Reader Options) Position
 generatePassPosition = do
@@ -221,3 +249,9 @@ withAmountAlteredDifficultyLevel :: AmountDifference -> Track
 withAmountAlteredDifficultyLevel difference
     =
     Free (Condition (WithAmountAlteredDifficultyLevel difference) (Pure ()))
+
+eitherSequenceEnd :: Track
+eitherSequenceEnd = Free (EitherSequenceEnd (Pure ()))
+
+eitherSequenceWhere :: Track
+eitherSequenceWhere = Free (EitherSequenceWhere (Pure ()))

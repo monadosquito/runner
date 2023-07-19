@@ -4,6 +4,8 @@ module Core.Track ( Track.Track
                   , Track.withAlteredDifficultyLevel
                   , Track.withDifficultyLevelAmount
                   , Track.withAmountAlteredDifficultyLevel
+                  , Track.eitherSequenceEnd
+                  , Track.eitherSequenceWhere
                   ) where
 
 

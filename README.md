@@ -41,13 +41,15 @@ configuration file or as command arguments.
 
 track smart constructor effects
 
-|Smart constructor                 |Effect                                                                         |
-|----------------------------------|-------------------------------------------------------------------------------|
-|`part`                            |A given number of track lines is generated.                                    |
-|`withAlteredDifficultyLevel`      |A given integer is added to a current difficulty level.                        |
-|`withAmountAlteredDifficultyLevel`|A given maximum difficulty level amount is added to a current difficulty level.|
-|`withDifficultyLevel`             |A given track difficulty level is set as a current one.                        |
-|`withDifficultyLevelAmount`       |A given maximum difficulty level amount is set as a current difficulty level.  |
+|Smart constructor                 |Effect                                                                                                             |
+|----------------------------------|-------------------------------------------------------------------------------------------------------------------|
+|`eitherSequenceEnd`               |One of track sequences prepended with the `eitherSequenceWhere` smart constructor is generated.                    |
+|`eitherSequenceWhere`             |A following track sequence up to the same or `eitherSequenceEnd` smart constructor can be selected to be generated.|
+|`part`                            |A given number of track lines is generated.                                                                        |
+|`withAlteredDifficultyLevel`      |A given integer is added to a current difficulty level.                                                            |
+|`withAmountAlteredDifficultyLevel`|A given maximum difficulty level amount is added to a current difficulty level.                                    |
+|`withDifficultyLevel`             |A given track difficulty level is set as a current one.                                                            |
+|`withDifficultyLevelAmount`       |A given maximum difficulty level amount is set as a current difficulty level.                                      |
 
 # Table 2
 
