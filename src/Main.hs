@@ -26,12 +26,14 @@ import Core.Track.Configuration.Configuration
 
 import Control.Concurrent
 import Data.Foldable
+import Control.Lens
 
 import Core.Track.Track
 
 
 data FlowInput = FlowInput { trackCells :: List.NonEmpty [Cell]
-                           , trackPiecesCnt :: Int
+                           , trackPiecesCnt
+                           , trackPieceCap :: Int
                            , trackRem :: Maybe (List.NonEmpty [Cell])
                            }
 
@@ -41,8 +43,8 @@ main = do
     gen <- newStdGen
     conf <- getConfiguration (Proxy @Sys) . parseConfiguration $ Proxy @Aeson
     run gen conf $ \FlowInput {..} -> do
-        forM_ [0..trackPiecesCnt - 1] $ \ix -> do
-            rndrTrackPiece ix trackCells
+        forM_ [0..trackPiecesCnt - 1] $ \ix' -> do
+            rndrTrackPiece ix' trackPieceCap trackCells
             threadDelay 1000000
         rndr trackRem
   where
@@ -53,13 +55,13 @@ main = do
             trackPiecesCnt = List.length trackCells `div` trackPieceCap
             trackRem = List.nonEmpty
                      $ List.drop (trackPieceCap * trackPiecesCnt) trackCells
+            trackPieceCap = conf
+                          ^. preferences
+                          . trackPieceCapacity
+                          . to fromIntegral
         flow FlowInput {..}
     rndr (Just trackPiece) = render (Proxy @Cnsl) trackPiece
     rndr Nothing = pure ()
-    rndrTrackPiece ix' cells' = do
-        let trackPiece = take trackPieceCap
-                       $ List.drop (ix' * trackPieceCap) cells'
+    rndrTrackPiece ix' cap cells' = do
+        let trackPiece = take cap $ List.drop (ix' * cap) cells'
         rndr $ List.nonEmpty trackPiece
-
-trackPieceCap :: Int
-trackPieceCap = 10

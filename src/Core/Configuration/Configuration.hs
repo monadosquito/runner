@@ -14,6 +14,8 @@ type TrackName = String
 
 type TrackWidth = Natural
 
+type TrackPieceCapacity = Natural
+
 
 data Configuration = Configuration { _preferences :: Preferences
                                    , _options :: Options
@@ -21,6 +23,7 @@ data Configuration = Configuration { _preferences :: Preferences
 
 data Preferences = Preferences { _trackName :: TrackName
                                , _configurationFilePath :: FilePath
+                               , _trackPieceCapacity :: TrackPieceCapacity
                                }
 
 data Options = Options { _trackWidth :: TrackWidth
@@ -35,6 +38,7 @@ makeFieldsNoPrefix ''Preferences
 defaultPreferences :: Preferences
 defaultPreferences = Preferences { _trackName = "default"
                                  , _configurationFilePath = "configuration.json"
+                                 , _trackPieceCapacity = 10
                                  }
 
 defaultConfiguration :: Configuration

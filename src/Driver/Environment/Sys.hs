@@ -31,6 +31,12 @@ instance Environment Sys where
                                             <> short 'c'
                                             <> value (_configurationFilePath defaultPreferences)
                                            )
+                             <*> option auto
+                                     (long "track-piece-capacity"
+                                      <> metavar "NATURAL_NUMBER"
+                                      <> short 'p'
+                                      <> value (_trackPieceCapacity prefs')
+                                     )
             readConf (Configuration prefs' opts) = Configuration
                                                  <$> readPrefs prefs'
                                                  <*> readOpts opts
