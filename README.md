@@ -18,7 +18,10 @@
 
 ## Hints
 
+- A probability should be a floating number from `0` to `1`.
 - Create tracks under the `Core.Script.Track` module.
+- In order that either track sequences have the given probabilities, their sum
+  must be `1`, otherwise they are equal.
 
 # Configure
 
@@ -50,6 +53,7 @@ track smart constructor effects
 |`withAmountAlteredDifficultyLevel`|A given maximum difficulty level amount is added to a current difficulty level.                                    |
 |`withDifficultyLevel`             |A given track difficulty level is set as a current one.                                                            |
 |`withDifficultyLevelAmount`       |A given maximum difficulty level amount is set as a current difficulty level.                                      |
+|`withProbability`                 |An either sequence within which it is present is selected with a given probability.                                |
 
 # Table 2
 

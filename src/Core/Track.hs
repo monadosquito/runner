@@ -6,6 +6,7 @@ module Core.Track ( Track.Track
                   , Track.withAmountAlteredDifficultyLevel
                   , Track.eitherSequenceEnd
                   , Track.eitherSequenceWhere
+                  , Track.withProbability
                   ) where
 
 

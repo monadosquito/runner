@@ -21,6 +21,7 @@ import qualified Data.List.NonEmpty as List
 
 import Core.Configuration.Configuration
 import Control.Monad.Reader
+import Data.Monoid
 
 import Core.Constraint
 
@@ -37,8 +38,12 @@ type Difference = Int
 
 type AmountDifference = Amount'
 
+type Probability = Float
+
 
 newtype Boundaries = Boundaries {_un_ :: (Position, Position)}
+
+newtype Range = Range (Probability, Probability)
 
 
 data Cell = Obstacle | TrailPart | Pass deriving Eq
@@ -47,6 +52,7 @@ data GenerationState = GenerationState { _cells :: List.NonEmpty [Cell]
                                        , _generator :: StdGen
                                        , _difficultyLevel :: DifficultyLevel
                                        , _eitherSequences :: [Track]
+                                       , _probabilities :: [Probability]
                                        }
 
 data Track' next = Part { _partLength :: PartLength
@@ -65,6 +71,7 @@ data Condition = WithDifficultyLevel DifficultyLevel
                | WithAlteredDifficultyLevel Difference
                | WithDifficultyLevelAmount Amount
                | WithAmountAlteredDifficultyLevel Amount'
+               | WithProbability Probability
 
 
 makeFieldsNoPrefix ''GenerationState
@@ -117,16 +124,47 @@ interpret' (Free (EitherSequenceEnd track)) = do
     eitherSequences' <- use eitherSequences
     eitherSequences .= []
     previousGenerator <- use generator
-    let (eitherSequenceIndex, nextGenerator) = randomR (0
-                                                       , length eitherSequences'
-                                                         - 1
-                                                       )
-                                                       previousGenerator
-    generator .= nextGenerator
-    interpret' $ eitherSequences' !! eitherSequenceIndex
+    probabilities' <- use probabilities
+    probabilities .= []
+    if length eitherSequences' == length probabilities'
+       && foldMap Sum probabilities' == 1
+    then do
+        let (number, nextGenerator) = randomR ((0, 1) :: (Float, Float))
+                                              previousGenerator
+            probabilityRanges = snd
+                              $ mapAccumL (\from' to'
+                                           ->
+                                           ( from' + to'
+                                           , Range (from', from' + to')
+                                           )
+                                          )
+                                          0
+                                          probabilities'
+            eitherSequenceIndex = findIndex (\(Range (from', to'))
+                                             ->
+                                             number <= to' && number >= from'
+                                            )
+                                            probabilityRanges
+        generator .= nextGenerator
+        case eitherSequenceIndex of
+            Just eitherSequenceIndex'
+                ->
+                interpret' $ eitherSequences' !! eitherSequenceIndex'
+            Nothing -> return ()
+    else do
+        let (eitherSequenceIndex, nextGenerator) = randomR ( 0
+                                                           , length eitherSequences'
+                                                             - 1
+                                                           )
+                                                           previousGenerator
+        generator .= nextGenerator
+        interpret' $ eitherSequences' !! eitherSequenceIndex
     interpret' track
 interpret' (Free (EitherSequenceWhere track)) = do
     eitherSequences %= (Pure () :)
+    interpret' track
+interpret' (Free (Condition (WithProbability probability') track)) = do
+    probabilities %= (probability' :)
     interpret' track
 interpret' (Free track) = do
     eitherSequences' <- use eitherSequences
@@ -202,6 +240,7 @@ initialGenerationState generator' = do
                              generator'
                              (fromIntegral difficultyLevel')
                              []
+                             []
 
 generatePassPosition :: StateT GenerationState (Reader Options) Position
 generatePassPosition = do
@@ -255,3 +294,8 @@ eitherSequenceEnd = Free (EitherSequenceEnd (Pure ()))
 
 eitherSequenceWhere :: Track
 eitherSequenceWhere = Free (EitherSequenceWhere (Pure ()))
+
+withProbability :: Probability -> Track
+withProbability probability
+    =
+    Free (Condition (WithProbability probability) (Pure ()))
