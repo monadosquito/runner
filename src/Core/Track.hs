@@ -9,6 +9,7 @@ module Core.Track ( Track.Track
                   , Track.withProbability
                   , Track.withGradualDifficultyLevelSlope
                   , Track.withSteepDifficultyLevelSlope
+                  , Track.withGradualDifficultyLevelAmountRiseSlope
                   ) where
 
 

@@ -44,18 +44,19 @@ configuration file or as command arguments.
 
 track smart constructor effects
 
-|Smart constructor                 |Effect                                                                                                                |
-|----------------------------------|----------------------------------------------------------------------------------------------------------------------|
-|`eitherSequenceEnd`               |One of track sequences prepended with the `eitherSequenceWhere` smart constructor is generated.                       |
-|`eitherSequenceWhere`             |A following track sequence up to the same or `eitherSequenceEnd` smart constructor can be selected to be generated.   |
-|`part`                            |A given number of track lines is generated.                                                                           |
-|`withAlteredDifficultyLevel`      |A given integer is added to a current difficulty level.                                                               |
-|`withAmountAlteredDifficultyLevel`|A given maximum difficulty level amount is added to a current difficulty level.                                       |
-|`withDifficultyLevel`             |A given track difficulty level is set as a current one.                                                               |
-|`withDifficultyLevelAmount`       |A given maximum difficulty level amount is set as a current difficulty level.                                         |
-|`withGradualDifficultyLevelSlope` |A following track sequence is generated altering a difficulty level by a given difference every given number of lines.|
-|`withProbability`                 |An either sequence within which it is present is selected with a given probability.                                   |
-|`withSteepDifficultyLevelSlope`   |A following sequence has a steep difficulty level.                                                                    |
+|Smart constructor                          |Effect                                                                                                                |
+|-------------------------------------------|----------------------------------------------------------------------------------------------------------------------|
+|`eitherSequenceEnd`                        |One of track sequences prepended with the `eitherSequenceWhere` smart constructor is generated.                       |
+|`eitherSequenceWhere`                      |A following track sequence up to the same or `eitherSequenceEnd` smart constructor can be selected to be generated.   |
+|`part`                                     |A given number of track lines is generated.                                                                           |
+|`withAlteredDifficultyLevel`               |A given integer is added to a current difficulty level.                                                               |
+|`withAmountAlteredDifficultyLevel`         |A given maximum difficulty level amount is added to a current difficulty level.                                       |
+|`withDifficultyLevel`                      |A given track difficulty level is set as a current one.                                                               |
+|`withDifficultyLevelAmount`                |A given maximum difficulty level amount is set as a current difficulty level.                                         |
+|`withGradualDifficultyLevelAmountRiseSlope`|A following track sequence is generated altering a difficulty level by a its amount every given number of lines.      |
+|`withGradualDifficultyLevelSlope`          |A following track sequence is generated altering a difficulty level by a given difference every given number of lines.|
+|`withProbability`                          |An either sequence within which it is present is selected with a given probability.                                   |
+|`withSteepDifficultyLevelSlope`            |A following sequence has a steep difficulty level.                                                                    |
 
 # Table 2
 

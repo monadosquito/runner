@@ -78,6 +78,7 @@ data Condition = WithDifficultyLevel DifficultyLevel
                | WithProbability Probability
                | WithGradualDifficultyLevelSlope Rise Run
                | WithSteepDifficultyLevelSlope
+               | WithGradualDifficultyLevelAmountRiseSlope AmountRise Run
 
 data Difficulty = Difficulty { _level :: DifficultyLevel
                              , _levelSlope :: Slope
@@ -240,6 +241,11 @@ interpret' (Free track) = do
             Condition WithSteepDifficultyLevelSlope _
                 ->
                 difficulty . levelSlope .= SteepSlope
+            Condition (WithGradualDifficultyLevelAmountRiseSlope rise run) _
+                -> do
+                maximumDifficultyLevel <- asks _trackWidth
+                let rise' = round $ fromIntegral maximumDifficultyLevel * rise
+                interpret' $ withGradualDifficultyLevelSlope rise' run
     else eitherSequences . _head %= (*> Free (Pure () <$ track))
     interpret' $ _next track
 
@@ -342,3 +348,12 @@ withSteepDifficultyLevelSlope :: Track
 withSteepDifficultyLevelSlope
     =
     Free (Condition (WithSteepDifficultyLevelSlope) (Pure ()))
+
+withGradualDifficultyLevelAmountRiseSlope :: AmountRise' -> Run -> Track
+withGradualDifficultyLevelAmountRiseSlope rise run
+    =
+    Free (Condition (WithGradualDifficultyLevelAmountRiseSlope (amountRise rise)
+                                                               run
+                    )
+                    (Pure ())
+         )

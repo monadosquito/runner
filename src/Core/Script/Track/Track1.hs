@@ -13,7 +13,7 @@ track1 = eitherSequenceWhere
        *> withProbability 0.1
        *> part 10
        *> eitherSequenceEnd
-       *> withGradualDifficultyLevelSlope 1 2
+       *> withGradualDifficultyLevelAmountRiseSlope 0.1 2
        *> part 10
        *> withAmountAlteredDifficultyLevel 0.5
        *> withSteepDifficultyLevelSlope
