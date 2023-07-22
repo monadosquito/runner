@@ -45,3 +45,4 @@ executable runner
         Driver.Parser.Aeson,
         Core.Track.Configuration,
         Core.Track.Configuration.Configuration,
+        Core.Constraint,

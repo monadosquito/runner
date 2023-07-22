@@ -39,11 +39,12 @@ configuration file or as command arguments.
 
 track smart constructor effects
 
-|Smart constructor           |Effect                                                 |
-|----------------------------|-------------------------------------------------------|
-|`part`                      |A given number of track lines is generated.            |
-|`withAlteredDifficultyLevel`|A given integer is added to a current difficulty level.|
-|`withDifficultyLevel`       |A given track difficulty level is set as a current one.|
+|Smart constructor           |Effect                                                                       |
+|----------------------------|-----------------------------------------------------------------------------|
+|`part`                      |A given number of track lines is generated.                                  |
+|`withAlteredDifficultyLevel`|A given integer is added to a current difficulty level.                      |
+|`withDifficultyLevel`       |A given track difficulty level is set as a current one.                      |
+|`withDifficultyLevelAmount` |A given maximum difficulty level amount is set as a current difficulty level.|
 
 # Table 2
 

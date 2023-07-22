@@ -23,6 +23,8 @@ import qualified Data.Sequence as Sequence
 import Core.Configuration.Configuration
 import Control.Monad.Reader
 
+import Core.Constraint
+
 
 type PartLength = Natural
 
@@ -51,6 +53,7 @@ data Track' next = Part PartLength next
 
 data Condition = WithDifficultyLevel DifficultyLevel
                | WithAlteredDifficultyLevel Difference
+               | WithDifficultyLevelAmount Amount
 
 
 makeFieldsNoPrefix ''GenerationState
@@ -119,6 +122,12 @@ interpret' (Free (Condition (WithAlteredDifficultyLevel difference) track)) = do
                                  -> maximumDifficultyLevel
                                  | otherwise -> newDifficultyLevel
         track
+interpret' (Free (Condition (WithDifficultyLevelAmount amount') track)) = do
+    maximumDifficultyLevel <- asks _trackWidth
+    interpret' $ do
+        withDifficultyLevel . round
+                            $ fromIntegral maximumDifficultyLevel * amount'
+        track
 
 selectNextTrailPartPosition :: StateT GenerationState (Reader Options)
                                                       (Maybe Position)
@@ -186,3 +195,8 @@ withAlteredDifficultyLevel :: Difference -> Track
 withAlteredDifficultyLevel difference
     =
     Free (Condition (WithAlteredDifficultyLevel difference) (Pure ()))
+
+withDifficultyLevelAmount :: Amount' -> Track
+withDifficultyLevelAmount amount'
+    =
+    Free (Condition (WithDifficultyLevelAmount (amount amount')) (Pure ()))
