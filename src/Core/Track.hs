@@ -1,5 +1,5 @@
 module Core.Track ( Track.Track
-                  , Track.part
+                  , Track.finitePart
                   , Track.withDifficultyLevel
                   , Track.withAlteredDifficultyLevel
                   , Track.withDifficultyLevelAmount
@@ -11,6 +11,8 @@ module Core.Track ( Track.Track
                   , Track.withSteepDifficultyLevelSlope
                   , Track.withGradualDifficultyLevelAmountRiseSlope
                   , Track.infiniteTailWhere
+                  , Track.predefinedPart
+                  , Track.Cell (..)
                   ) where
 
 

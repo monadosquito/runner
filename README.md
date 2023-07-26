@@ -15,13 +15,18 @@
   otherwise it is a nearest boundary.
 - A difficulty level difference must be an integer having absolute value not
   greater than a track width, otherwise it is a nearest boundary.
+- Predefined track lines lengths must be equal to a track width, otherwise they
+  are ignored.
 
 ## Hints
 
 - A probability should be a floating number from `0` to `1`.
 - Create tracks under the `Core.Script.Track` module.
-- In order that either track sequences have the given probabilities, their sum
-  must be `1`, otherwise they are equal.
+- In order that a track parts can be generated after a predefined one is
+  appended, its last line must have at least one `Core.Track.Cell.TrailPart`
+  value.
+- In order that either track sequences are selected with the given
+  probabilities, their sum must be `1`, otherwise they are equal.
 
 # Configure
 
@@ -48,8 +53,9 @@ track smart constructor effects
 |-------------------------------------------|----------------------------------------------------------------------------------------------------------------------|
 |`eitherSequenceEnd`                        |One of track sequences prepended with the `eitherSequenceWhere` smart constructor is generated.                       |
 |`eitherSequenceWhere`                      |A following track sequence up to the same or `eitherSequenceEnd` smart constructor can be selected to be generated.   |
+|`finitePart`                               |A given number of track lines is generated.                                                                           |
 |`infiniteTailWhere`                        |A following track sequence is repeated infinitely.                                                                    |
-|`part`                                     |A given number of track lines is generated.                                                                           |
+|`predefinedPart`                           |Given track lines are appended to a track.                                                                            |
 |`withAlteredDifficultyLevel`               |A given integer is added to a current difficulty level.                                                               |
 |`withAmountAlteredDifficultyLevel`         |A given maximum difficulty level amount is added to a current difficulty level.                                       |
 |`withDifficultyLevel`                      |A given track difficulty level is set as a current one.                                                               |

@@ -44,6 +44,8 @@ type Rise = Difference
 
 type Run = PartLength
 
+type PartBody = [[Cell]]
+
 
 newtype Boundaries = Boundaries {_un_ :: (Position, Position)}
 
@@ -60,10 +62,7 @@ data GenerationState = GenerationState { _cells :: List.NonEmpty [Cell]
                                        , _cycle' :: Track
                                        }
 
-data Track' next = Part { _partLength :: PartLength
-                        , _next :: next
-                        }
-                 | Condition { _condition :: Condition
+data Track' next = Condition { _condition :: Condition
                              , _next :: next
                              }
                  | SequenceEnd { _next :: next
@@ -71,6 +70,9 @@ data Track' next = Part { _partLength :: PartLength
                  | Sequence { _sequence :: Sequence
                             , _next :: next
                             }
+                 | Part { _part :: Part
+                        , _next :: next
+                        }
                  deriving Functor
 
 data Condition = WithDifficultyLevel DifficultyLevel
@@ -89,6 +91,8 @@ data Difficulty = Difficulty { _level :: DifficultyLevel
 data Slope = GradualSlope Rise Run | SteepSlope
 
 data Sequence = EitherSequenceWhere | InfiniteTailWhere
+
+data Part = FinitePart PartLength | PredefinedPart PartBody
 
 
 makeFieldsNoPrefix ''GenerationState
@@ -189,7 +193,7 @@ interpret' (Free track) = do
     if null eitherSequences'
     then do
         case track of
-            Part length' _ -> do
+            Part (FinitePart length') _ -> do
                 difficultyLevelSlope' <- use $ difficulty . levelSlope
                 case difficultyLevelSlope' of
                     GradualSlope rise run -> do
@@ -200,11 +204,11 @@ interpret' (Free track) = do
                             let piecesCount = fromIntegral $ length' `div` run
                             interpret' . replicateM_ piecesCount $ do
                                 withAlteredDifficultyLevel rise
-                                part run
+                                finitePart run
                             difficulty . levelSlope .= difficultyLevelSlope'
                         else do
                             difficulty . levelSlope .= SteepSlope
-                            interpret' $ part length'
+                            interpret' $ finitePart length'
                     SteepSlope
                         ->
                         replicateM_ (fromIntegral length') generateLine
@@ -251,6 +255,13 @@ interpret' (Free track) = do
                 let rise' = round $ fromIntegral maximumDifficultyLevel * rise
                 interpret' $ withGradualDifficultyLevelSlope rise' run
             Sequence InfiniteTailWhere _ -> cycle' .= Free track
+            Part (PredefinedPart body) _ -> do
+                width <- fromIntegral <$> asks _trackWidth
+                when (length (head body) == width
+                      && all ((== length (head body)) . length) body
+                     )
+                     $
+                     cells %= (List.prependList body)
     else eitherSequences . _head %= (*> Free (Pure () <$ track))
     interpret' $ _next track
 
@@ -273,8 +284,8 @@ selectNextTrailPartPosition = do
             return $ Just (fromIntegral next')
         Nothing -> return Nothing
 
-part :: PartLength -> Track
-part length' = Free (Part length' (Pure ()))
+finitePart :: PartLength -> Track
+finitePart length' = Free (Part (FinitePart length') (Pure ()))
 
 initialGenerationState :: StdGen -> Reader Options GenerationState
 initialGenerationState generator' = do
@@ -371,3 +382,6 @@ interpretFrom :: GenerationState -> Track -> GenerationState
 interpretFrom generationState track = runReader initialise defaultOptions
   where
     initialise = execStateT (interpret' track) generationState
+
+predefinedPart :: PartBody -> Track
+predefinedPart body = Free ((Part (PredefinedPart body)) (Pure ()))

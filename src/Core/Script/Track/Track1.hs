@@ -5,18 +5,20 @@ import Core.Track
 
 
 track1 :: Track
-track1 = eitherSequenceWhere
+track1 = predefinedPart [ [Obstacle, TrailPart, TrailPart, TrailPart, Obstacle]
+                        , [Obstacle, TrailPart, TrailPart, TrailPart, Obstacle]
+                        ]
+       *> eitherSequenceWhere
        *> withProbability 0.9
-       *> part 10
+       *> finitePart 10
        *> eitherSequenceWhere
        *> withAmountAlteredDifficultyLevel 0.5
        *> withProbability 0.1
-       *> part 10
+       *> finitePart 10
        *> eitherSequenceEnd
        *> withGradualDifficultyLevelAmountRiseSlope 0.1 2
-       *> part 10
-       *> withAmountAlteredDifficultyLevel 0.5
+       *> finitePart 10
        *> withSteepDifficultyLevelSlope
-       *> part 10
+       *> finitePart 10
        *> infiniteTailWhere
-       *> part 10
+       *> finitePart 10
