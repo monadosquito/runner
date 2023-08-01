@@ -4,7 +4,7 @@ module Core.Track ( Track.Track
                   , Track.withAlteredDifficultyLevel
                   , Track.withDifficultyLevelAmount
                   , Track.withAmountAlteredDifficultyLevel
-                  , Track.eitherSequenceEnd
+                  , Track.sequenceEnd
                   , Track.eitherSequenceWhere
                   , Track.withProbability
                   , Track.withGradualDifficultyLevelSlope
@@ -15,6 +15,7 @@ module Core.Track ( Track.Track
                   , Track.leftPredefinedPart
                   , Track.rightPredefinedPart
                   , Track.Cell (..)
+                  , Track.repeatedSequenceWhere
                   ) where
 
 

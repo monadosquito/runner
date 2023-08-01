@@ -46,6 +46,8 @@ type Run = PartLength
 
 type PartBody = [[Cell]]
 
+type Count = Natural
+
 
 newtype Boundaries = Boundaries {_un_ :: (Position, Position)}
 
@@ -62,6 +64,8 @@ data GenerationState = GenerationState { _cells :: List.NonEmpty [Cell]
                                        , _eitherSequences :: [Track]
                                        , _probabilities :: [Probability]
                                        , _cycle' :: Track
+                                       , _repeatedSequence :: Track
+                                       , _markedSequence :: Maybe MarkedSequence
                                        }
 
 data Track' next = Condition { _condition :: Condition
@@ -92,12 +96,16 @@ data Difficulty = Difficulty { _level :: DifficultyLevel
 
 data Slope = GradualSlope Rise Run | SteepSlope
 
-data Sequence = EitherSequenceWhere | InfiniteTailWhere
+data Sequence = EitherSequenceWhere
+              | InfiniteTailWhere
+              | RepeatedSequenceWhere Count
 
 data Part = FinitePart PartLength
           | MiddlePredefinedPart Cell PartBody
           | LeftPredefinedPart Cell PartBody
           | RightPredefinedPart Cell PartBody
+
+data MarkedSequence = EitherSequence | RepeatedSequence Count
 
 
 makeFieldsNoPrefix ''GenerationState
@@ -148,157 +156,181 @@ interpret generator' track = runReader initialise defaultOptions
 interpret' :: Track -> StateT GenerationState (Reader Options) ()
 interpret' (Pure _) = pure ()
 interpret' (Free (SequenceEnd track)) = do
-    eitherSequences' <- use eitherSequences
-    eitherSequences .= []
-    previousGenerator <- use generator
-    probabilities' <- use probabilities
-    probabilities .= []
-    if length eitherSequences' == length probabilities'
-       && foldMap Sum probabilities' == 1
-    then do
-        let (number, nextGenerator) = randomR ((0, 1) :: (Float, Float))
-                                              previousGenerator
-            probabilityRanges = snd
-                              $ mapAccumL (\from' to'
-                                           ->
-                                           ( from' + to'
-                                           , Range (from', from' + to')
-                                           )
-                                          )
-                                          0
-                                          probabilities'
-            eitherSequenceIndex = findIndex (\(Range (from', to'))
-                                             ->
-                                             number <= to' && number >= from'
-                                            )
-                                            probabilityRanges
-        generator .= nextGenerator
-        case eitherSequenceIndex of
-            Just eitherSequenceIndex'
-                ->
-                interpret' $ eitherSequences' !! eitherSequenceIndex'
-            Nothing -> return ()
-    else do
-        let (eitherSequenceIndex, nextGenerator) = randomR ( 0
-                                                           , length eitherSequences'
-                                                             - 1
-                                                           )
-                                                           previousGenerator
-        generator .= nextGenerator
-        interpret' $ eitherSequences' !! eitherSequenceIndex
+    markedSequence' <- use markedSequence
+    markedSequence .= Nothing
+    case markedSequence' of
+        Just EitherSequence -> do
+            eitherSequences' <- use eitherSequences
+            eitherSequences .= []
+            previousGenerator <- use generator
+            probabilities' <- use probabilities
+            probabilities .= []
+            if length eitherSequences' == length probabilities'
+               && foldMap Sum probabilities' == 1
+            then do
+                let (number, nextGenerator) = randomR ((0, 1) :: (Float, Float))
+                                                      previousGenerator
+                    probabilityRanges = snd
+                                      $ mapAccumL (\from' to'
+                                                   ->
+                                                   ( from' + to'
+                                                   , Range (from', from' + to')
+                                                   )
+                                                  )
+                                                  0
+                                                  probabilities'
+                    eitherSequenceIndex = findIndex (\(Range (from', to'))
+                                                     ->
+                                                     number <= to'
+                                                     && number >= from'
+                                                    )
+                                                    probabilityRanges
+                generator .= nextGenerator
+                case eitherSequenceIndex of
+                    Just eitherSequenceIndex'
+                        ->
+                        interpret' $ eitherSequences' !! eitherSequenceIndex'
+                    Nothing -> return ()
+            else do
+                let (eitherSequenceIndex, nextGenerator) = randomR ( 0
+                                                                   , length eitherSequences'
+                                                                     - 1
+                                                                   )
+                                                                   previousGenerator
+                generator .= nextGenerator
+                interpret' $ eitherSequences' !! eitherSequenceIndex
+        Just (RepeatedSequence count) -> do
+            repeatedSequence' <- use repeatedSequence
+            repeatedSequence .= Pure ()
+            interpret' $ replicateM_ (fromIntegral count) repeatedSequence'
+        Nothing -> return ()
     interpret' track
 interpret' (Free (Sequence EitherSequenceWhere track)) = do
     eitherSequences %= (Pure () :)
+    markedSequence .= Just EitherSequence
     interpret' track
 interpret' (Free (Condition (WithProbability probability') track)) = do
     probabilities %= (probability' :)
     interpret' track
+interpret' (Free (Sequence (RepeatedSequenceWhere count) track)) = do
+    markedSequence .= Just (RepeatedSequence count)
+    interpret' track
 interpret' (Free track) = do
-    eitherSequences' <- use eitherSequences
-    if null eitherSequences'
-    then do
-        case track of
-            Part (FinitePart length') _ -> do
-                difficultyLevelSlope' <- use $ difficulty . levelSlope
-                case difficultyLevelSlope' of
-                    GradualSlope rise run -> do
-                        width <- asks _trackWidth
-                        if length' `div` run * fromIntegral rise <= width
-                        then do
-                            difficulty . levelSlope .= SteepSlope
-                            let piecesCount = fromIntegral $ length' `div` run
-                            interpret' . replicateM_ piecesCount $ do
-                                withAlteredDifficultyLevel rise
-                                finitePart run
-                            difficulty . levelSlope .= difficultyLevelSlope'
-                        else do
-                            difficulty . levelSlope .= SteepSlope
-                            interpret' $ finitePart length'
-                    SteepSlope
-                        ->
-                        replicateM_ (fromIntegral length') generateLine
-            Condition (WithDifficultyLevel level') _ -> do
-                maximumDifficultyLevel <- asks _trackWidth
-                difficulty . level .= if level' <= maximumDifficultyLevel
-                                      then level'
-                                      else maximumDifficultyLevel
-            Condition (WithAlteredDifficultyLevel difference) _ -> do
-                oldDifficultyLevel <- use $ difficulty . level
-                let newDifficultyLevel = fromIntegral oldDifficultyLevel
-                                       + difference
-                maximumDifficultyLevel <- fromIntegral <$> asks _trackWidth
-                interpret' $ do
-                    withDifficultyLevel . fromIntegral
-                                        $ if | newDifficultyLevel < 0 -> 0
-                                             | newDifficultyLevel
-                                               > maximumDifficultyLevel
-                                             -> maximumDifficultyLevel
-                                             | otherwise -> newDifficultyLevel
-            Condition (WithDifficultyLevelAmount amount') _ -> do
-                maximumDifficultyLevel <- asks _trackWidth
-                interpret' . withDifficultyLevel
-                           . round
-                           $ fromIntegral maximumDifficultyLevel
-                           * amount'
-            Condition (WithAmountAlteredDifficultyLevel difference) _ -> do
-                maximumDifficultyLevel <- asks _trackWidth
-                interpret' . withAlteredDifficultyLevel
-                           . round
-                           $ fromIntegral maximumDifficultyLevel
-                           * if | abs difference < 0 -> 0
-                                | abs difference > 1 -> 1
-                                | otherwise -> difference
-            Condition (WithGradualDifficultyLevelSlope rise run) _
-                ->
-                difficulty . levelSlope .= GradualSlope rise run
-            Condition WithSteepDifficultyLevelSlope _
-                ->
-                difficulty . levelSlope .= SteepSlope
-            Condition (WithGradualDifficultyLevelAmountRiseSlope rise run) _
-                -> do
-                maximumDifficultyLevel <- asks _trackWidth
-                let rise' = round $ fromIntegral maximumDifficultyLevel * rise
-                interpret' $ withGradualDifficultyLevelSlope rise' run
-            Sequence InfiniteTailWhere _ -> cycle' .= Free track
-            Part (MiddlePredefinedPart cell body) _ -> do
-                width <- fromIntegral <$> asks _trackWidth
-                when (isRectangular body && length (head body) <= width) $ do
-                    let bodyOffset = fromIntegral $ width - length (head body)
-                        leftBodyOffset = bodyOffset `div` 2
-                        rightBodyOffset = bodyOffset - leftBodyOffset
-                        offsettedBody = offsetBody cell
-                                                   (Offset ( leftBodyOffset
-                                                           , rightBodyOffset
-                                                           )
-                                                   )
-                                                   body
-                    cells %= (List.prependList offsettedBody)
-            Part (LeftPredefinedPart cell body) _ -> do
-                width <- fromIntegral <$> asks _trackWidth
-                when (isRectangular body && length (head body) <= width) $ do
-                    let rightBodyOffset = fromIntegral
-                                        $ width - length (head body)
-                        rightOffsettedBody = offsetBody cell
-                                                        (Offset ( 0
-                                                                , rightBodyOffset
-                                                                )
-                                                        )
-                                                        body
-                    cells %= (List.prependList rightOffsettedBody)
-            Part (RightPredefinedPart cell body) _ -> do
-                width <- fromIntegral <$> asks _trackWidth
-                when (isRectangular body && length (head body) <= width)
-                     $ do
-                    let leftBodyOffset = fromIntegral
-                                        $ width - length (head body)
-                        leftOffsettedBody = offsetBody cell
+    markedSequence' <- use markedSequence
+    case markedSequence' of
+        Nothing -> do
+            case track of
+                Part (FinitePart length') _ -> do
+                    difficultyLevelSlope' <- use $ difficulty . levelSlope
+                    case difficultyLevelSlope' of
+                        GradualSlope rise run -> do
+                            width <- asks _trackWidth
+                            if length' `div` run * fromIntegral rise <= width
+                            then do
+                                difficulty . levelSlope .= SteepSlope
+                                let piecesCount = fromIntegral
+                                                $ length' `div` run
+                                interpret' . replicateM_ piecesCount $ do
+                                    withAlteredDifficultyLevel rise
+                                    finitePart run
+                                difficulty . levelSlope .= difficultyLevelSlope'
+                            else do
+                                difficulty . levelSlope .= SteepSlope
+                                interpret' $ finitePart length'
+                        SteepSlope
+                            ->
+                            replicateM_ (fromIntegral length') generateLine
+                Condition (WithDifficultyLevel level') _ -> do
+                    maximumDifficultyLevel <- asks _trackWidth
+                    difficulty . level .= if level' <= maximumDifficultyLevel
+                                          then level'
+                                          else maximumDifficultyLevel
+                Condition (WithAlteredDifficultyLevel difference) _ -> do
+                    oldDifficultyLevel <- use $ difficulty . level
+                    let newDifficultyLevel = fromIntegral oldDifficultyLevel
+                                           + difference
+                    maximumDifficultyLevel <- fromIntegral <$> asks _trackWidth
+                    interpret' $ do
+                        withDifficultyLevel . fromIntegral
+                                            $ if | newDifficultyLevel < 0 -> 0
+                                                 | newDifficultyLevel
+                                                   > maximumDifficultyLevel
+                                                 -> maximumDifficultyLevel
+                                                 | otherwise
+                                                 -> newDifficultyLevel
+                Condition (WithDifficultyLevelAmount amount') _ -> do
+                    maximumDifficultyLevel <- asks _trackWidth
+                    interpret' . withDifficultyLevel
+                               . round
+                               $ fromIntegral maximumDifficultyLevel
+                               * amount'
+                Condition (WithAmountAlteredDifficultyLevel difference) _ -> do
+                    maximumDifficultyLevel <- asks _trackWidth
+                    interpret' . withAlteredDifficultyLevel
+                               . round
+                               $ fromIntegral maximumDifficultyLevel
+                               * if | abs difference < 0 -> 0
+                                    | abs difference > 1 -> 1
+                                    | otherwise -> difference
+                Condition (WithGradualDifficultyLevelSlope rise run) _
+                    ->
+                    difficulty . levelSlope .= GradualSlope rise run
+                Condition WithSteepDifficultyLevelSlope _
+                    ->
+                    difficulty . levelSlope .= SteepSlope
+                Condition (WithGradualDifficultyLevelAmountRiseSlope rise run) _
+                    -> do
+                    maximumDifficultyLevel <- asks _trackWidth
+                    let rise' = round
+                              $ fromIntegral maximumDifficultyLevel * rise
+                    interpret' $ withGradualDifficultyLevelSlope rise' run
+                Sequence InfiniteTailWhere _ -> cycle' .= Free track
+                Part (MiddlePredefinedPart cell body) _ -> do
+                    width <- fromIntegral <$> asks _trackWidth
+                    when (isRectangular body && length (head body) <= width)
+                         $ do
+                        let bodyOffset = fromIntegral
+                                       $ width - length (head body)
+                            leftBodyOffset = bodyOffset `div` 2
+                            rightBodyOffset = bodyOffset - leftBodyOffset
+                            offsettedBody = offsetBody cell
                                                        (Offset ( leftBodyOffset
-                                                               , 0
+                                                               , rightBodyOffset
                                                                )
                                                        )
                                                        body
-                    cells %= (List.prependList leftOffsettedBody)
-    else eitherSequences . _head %= (*> Free (Pure () <$ track))
+                        cells %= (List.prependList offsettedBody)
+                Part (LeftPredefinedPart cell body) _ -> do
+                    width <- fromIntegral <$> asks _trackWidth
+                    when (isRectangular body && length (head body) <= width) $ do
+                        let rightBodyOffset = fromIntegral
+                                            $ width - length (head body)
+                            rightOffsettedBody = offsetBody cell
+                                                            (Offset ( 0
+                                                                    , rightBodyOffset
+                                                                    )
+                                                            )
+                                                            body
+                        cells %= (List.prependList rightOffsettedBody)
+                Part (RightPredefinedPart cell body) _ -> do
+                    width <- fromIntegral <$> asks _trackWidth
+                    when (isRectangular body && length (head body) <= width)
+                         $ do
+                        let leftBodyOffset = fromIntegral
+                                           $ width - length (head body)
+                            leftOffsettedBody = offsetBody cell
+                                                           (Offset ( leftBodyOffset
+                                                                   , 0
+                                                                   )
+                                                           )
+                                                           body
+                        cells %= (List.prependList leftOffsettedBody)
+        Just EitherSequence
+            ->
+            eitherSequences . _head %= (*> Free (Pure () <$ track))
+        Just (RepeatedSequence _)
+            -> do
+            repeatedSequence %= (*> Free (Pure () <$ track))
     interpret' $ _next track
 
 selectNextTrailPartPosition :: StateT GenerationState (Reader Options)
@@ -333,6 +365,8 @@ initialGenerationState generator' = do
                              []
                              []
                              (Pure ())
+                             (Pure ())
+                             Nothing
 
 generatePassPosition :: StateT GenerationState (Reader Options) Position
 generatePassPosition = do
@@ -381,8 +415,8 @@ withAmountAlteredDifficultyLevel difference
     =
     Free (Condition (WithAmountAlteredDifficultyLevel difference) (Pure ()))
 
-eitherSequenceEnd :: Track
-eitherSequenceEnd = Free (SequenceEnd (Pure ()))
+sequenceEnd :: Track
+sequenceEnd = Free (SequenceEnd (Pure ()))
 
 eitherSequenceWhere :: Track
 eitherSequenceWhere = Free (Sequence EitherSequenceWhere (Pure ()))
@@ -446,3 +480,8 @@ rightPredefinedPart :: Cell -> PartBody -> Track
 rightPredefinedPart cell body
     =
     Free ((Part (RightPredefinedPart cell body)) (Pure ()))
+
+repeatedSequenceWhere :: Count -> Track
+repeatedSequenceWhere count
+    =
+    Free ((Sequence (RepeatedSequenceWhere count)) (Pure ()))
