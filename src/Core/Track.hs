@@ -3,6 +3,7 @@ module Core.Track ( Track.Track
                   , Track.withDifficultyLevel
                   , Track.withAlteredDifficultyLevel
                   , Track.withDifficultyLevelAmount
+                  , Track.withAmountAlteredDifficultyLevel
                   ) where
 
 

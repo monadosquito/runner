@@ -36,6 +36,8 @@ type DifficultyLevel = Natural
 
 type Difference = Int
 
+type AmountDifference = Amount'
+
 
 newtype Boundaries = Boundaries {_un_ :: (Position, Position)}
 
@@ -54,6 +56,7 @@ data Track' next = Part PartLength next
 data Condition = WithDifficultyLevel DifficultyLevel
                | WithAlteredDifficultyLevel Difference
                | WithDifficultyLevelAmount Amount
+               | WithAmountAlteredDifficultyLevel Amount'
 
 
 makeFieldsNoPrefix ''GenerationState
@@ -128,6 +131,19 @@ interpret' (Free (Condition (WithDifficultyLevelAmount amount') track)) = do
         withDifficultyLevel . round
                             $ fromIntegral maximumDifficultyLevel * amount'
         track
+interpret' (Free (Condition (WithAmountAlteredDifficultyLevel difference)
+                            track
+                 )
+           )
+           = do
+    maximumDifficultyLevel <- asks _trackWidth
+    interpret' $ do
+        withAlteredDifficultyLevel . round
+                                   $ fromIntegral maximumDifficultyLevel
+                                   * if | abs difference < 0 -> 0
+                                        | abs difference > 1 -> 1
+                                        | otherwise -> difference
+        track
 
 selectNextTrailPartPosition :: StateT GenerationState (Reader Options)
                                                       (Maybe Position)
@@ -200,3 +216,8 @@ withDifficultyLevelAmount :: Amount' -> Track
 withDifficultyLevelAmount amount'
     =
     Free (Condition (WithDifficultyLevelAmount (amount amount')) (Pure ()))
+
+withAmountAlteredDifficultyLevel :: AmountDifference -> Track
+withAmountAlteredDifficultyLevel difference
+    =
+    Free (Condition (WithAmountAlteredDifficultyLevel difference) (Pure ()))
