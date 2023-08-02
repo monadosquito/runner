@@ -5,4 +5,4 @@ import Core.Track
 
 
 track1 :: Track
-track1 = part 10 *> withDifficultyLevel 11 *> part 10
+track1 = part 10 *> withAlteredDifficultyLevel 11 *> part 10

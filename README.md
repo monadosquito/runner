@@ -11,6 +11,8 @@
 
 - A current difficulty level set within a particular track overwrites starting
   one there.
+- A difficulty level difference must be an integer having absolute value not
+  greater than a track width, otherwise it is a nearest boundary.
 
 ## Hints
 
@@ -37,10 +39,11 @@ configuration file or as command arguments.
 
 track smart constructor effects
 
-|Smart constructor    |Effect                                                 |
-|---------------------|-------------------------------------------------------|
-|`part`               |A given number of track lines is generated.            |
-|`withDifficultyLevel`|A given track difficulty level is set as a current one.|
+|Smart constructor           |Effect                                                 |
+|----------------------------|-------------------------------------------------------|
+|`part`                      |A given number of track lines is generated.            |
+|`withAlteredDifficultyLevel`|A given integer is added to a current difficulty level.|
+|`withDifficultyLevel`       |A given track difficulty level is set as a current one.|
 
 # Table 2
 

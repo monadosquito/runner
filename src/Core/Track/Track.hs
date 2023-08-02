@@ -3,6 +3,7 @@
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE MultiWayIf #-}
 
 
 module Core.Track.Track where
@@ -31,6 +32,8 @@ type Track = Free Track' ()
 
 type DifficultyLevel = Natural
 
+type Difference = Int
+
 
 newtype Boundaries = Boundaries {_un_ :: (Position, Position)}
 
@@ -43,8 +46,11 @@ data GenerationState = GenerationState { _cells :: List.NonEmpty [Cell]
                                        }
 
 data Track' next = Part PartLength next
-                 | WithDifficultyLevel DifficultyLevel next
+                 | Condition Condition next
                  deriving Functor
+
+data Condition = WithDifficultyLevel DifficultyLevel
+               | WithAlteredDifficultyLevel Difference
 
 
 makeFieldsNoPrefix ''GenerationState
@@ -96,12 +102,23 @@ interpret' (Pure _) = pure ()
 interpret' (Free (Part length' track))
     =
     Sequence.replicateA (fromIntegral length') generateLine *> interpret' track
-interpret' (Free (WithDifficultyLevel level track)) = do
+interpret' (Free (Condition (WithDifficultyLevel level) track)) = do
     maximumDifficultyLevel <- asks _trackWidth
     difficultyLevel .= if level <= maximumDifficultyLevel
                        then level
                        else maximumDifficultyLevel
     interpret' track
+interpret' (Free (Condition (WithAlteredDifficultyLevel difference) track)) = do
+    oldDifficultyLevel <- use difficultyLevel
+    let newDifficultyLevel = fromIntegral oldDifficultyLevel + difference
+    maximumDifficultyLevel <- fromIntegral <$> asks _trackWidth
+    interpret' $ do
+        withDifficultyLevel . fromIntegral
+                            $ if | newDifficultyLevel < 0 -> 0
+                                 | newDifficultyLevel > maximumDifficultyLevel
+                                 -> maximumDifficultyLevel
+                                 | otherwise -> newDifficultyLevel
+        track
 
 selectNextTrailPartPosition :: StateT GenerationState (Reader Options)
                                                       (Maybe Position)
@@ -161,4 +178,11 @@ scatter cell line = do
                   .~ cell
 
 withDifficultyLevel :: DifficultyLevel -> Track
-withDifficultyLevel level = Free (WithDifficultyLevel level (Pure ()))
+withDifficultyLevel level
+    =
+    Free (Condition (WithDifficultyLevel level) (Pure ()))
+
+withAlteredDifficultyLevel :: Difference -> Track
+withAlteredDifficultyLevel difference
+    =
+    Free (Condition (WithAlteredDifficultyLevel difference) (Pure ()))
