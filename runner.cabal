@@ -10,7 +10,18 @@ name: runner
 version: 1.0.0
 
 executable runner
-    build-depends: base, containers, free, lens, mtl, random,
+    build-depends:
+        base,
+        containers,
+        free,
+        lens,
+        mtl,
+        random,
+        aeson,
+        bytestring,
+        lens-aeson,
+        nonempty-containers,
+        text,
     default-language: Haskell2010
     ghc-options: -Wall
     hs-source-dirs: src,
@@ -22,3 +33,12 @@ executable runner
         Core.Port.Renderer,
         Driver.Renderer.Cnsl,
         Lens.List.NonEmpty,
+        Core.Configuration,
+        Core.Configuration.Configuration,
+        Core.Port.Environment,
+        Core.Port.Parser,
+        Core.Script.Track,
+        Core.Script.Track.DefaultTrack,
+        Core.Script.Track.Track2,
+        Driver.Environment.Sys,
+        Driver.Parser.Aeson,
