@@ -22,6 +22,7 @@ executable runner
         lens-aeson,
         nonempty-containers,
         text,
+        optparse-applicative,
     default-language: Haskell2010
     ghc-options: -Wall
     hs-source-dirs: src,
