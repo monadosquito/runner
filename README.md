@@ -18,6 +18,8 @@ configuration file or as command arguments.
 
 ## Notes
 
+- Options passed as arguments to the command overwrite ones read from a
+  configuration file.
 - If a configuration file whose particular key is set to a value is present,
   then the key is used from it, otherwise a [default value](#table-2) is used.
 
@@ -38,4 +40,4 @@ options
 |Option                 |Default value         |Command option          |Configuration key|Description                   |
 |-----------------------|----------------------|------------------------|-----------------|------------------------------|
 |Configuration file path|`"configuration.json"`|`--configuration` (`-c`)|-                |a configuration file path     |
-|Track name             |`"default"`           |-                       |`trackName`      |a name of a track to interpret|
+|Track name             |`"default"`           |`--track-name` (`-t`)   |`trackName`      |a name of a track to interpret|

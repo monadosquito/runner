@@ -20,13 +20,15 @@ import Driver.Parser.Aeson
 
 import Data.Map.NonEmpty
 
+import Core.Configuration.Configuration
+
 
 main :: IO ()
 main = do
     gen <- newStdGen
-    trackName <- getTrackName (Proxy @Sys) . parseTrackName $ Proxy @Aeson
-    run gen trackName . render $ Proxy @Cnsl
+    prefs <- getPreferences (Proxy @Sys) . parseTrackName $ Proxy @Aeson
+    run gen prefs . render $ Proxy @Cnsl
   where
-    run gen trackName flow = do
-        let track = tracks' ! trackName
+    run gen prefs flow = do
+        let track = tracks' ! _trackName prefs
         flow . List.reverse $ interpret gen track
