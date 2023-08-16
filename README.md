@@ -15,8 +15,8 @@
   otherwise it is a nearest boundary.
 - A difficulty level difference must be an integer having absolute value not
   greater than a track width, otherwise it is a nearest boundary.
-- Predefined track lines lengths must be equal to a track width, otherwise they
-  are ignored.
+- Predefined track lines lengths must not be empty and greater than a track
+  width, otherwise they are ignored.
 
 ## Hints
 
@@ -55,7 +55,9 @@ track smart constructor effects
 |`eitherSequenceWhere`                      |A following track sequence up to the same or `eitherSequenceEnd` smart constructor can be selected to be generated.   |
 |`finitePart`                               |A given number of track lines is generated.                                                                           |
 |`infiniteTailWhere`                        |A following track sequence is repeated infinitely.                                                                    |
-|`predefinedPart`                           |Given track lines are appended to a track.                                                                            |
+|`leftPredefinedPart`                       |Given track lines offsetted from the left with a given `Core.Track.Cell` value are appended to a track.               |
+|`middlePredefinedPart`                     |Given track lines offsetted from both sides with a given `Core.Track.Cell` value are appended to a track.             |
+|`rightPredefinedPart`                      |Given track lines offsetted from the right with a given `Core.Track.Cell` value are appended to a track.              |
 |`withAlteredDifficultyLevel`               |A given integer is added to a current difficulty level.                                                               |
 |`withAmountAlteredDifficultyLevel`         |A given maximum difficulty level amount is added to a current difficulty level.                                       |
 |`withDifficultyLevel`                      |A given track difficulty level is set as a current one.                                                               |

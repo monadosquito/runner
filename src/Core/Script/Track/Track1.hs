@@ -5,9 +5,18 @@ import Core.Track
 
 
 track1 :: Track
-track1 = predefinedPart [ [Obstacle, TrailPart, TrailPart, TrailPart, Obstacle]
-                        , [Obstacle, TrailPart, TrailPart, TrailPart, Obstacle]
-                        ]
+track1 = middlePredefinedPart Obstacle
+                              [ [TrailPart, TrailPart, TrailPart]
+                              , [TrailPart, TrailPart, TrailPart]
+                              ]
+       *> leftPredefinedPart Obstacle
+                             [ [TrailPart, TrailPart, TrailPart]
+                             , [TrailPart, TrailPart, TrailPart]
+                             ]
+       *> rightPredefinedPart Obstacle
+                              [ [TrailPart, TrailPart, TrailPart]
+                              , [TrailPart, TrailPart, TrailPart]
+                              ]
        *> eitherSequenceWhere
        *> withProbability 0.9
        *> finitePart 10

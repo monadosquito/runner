@@ -51,6 +51,8 @@ newtype Boundaries = Boundaries {_un_ :: (Position, Position)}
 
 newtype Range = Range (Probability, Probability)
 
+newtype Offset = Offset (Position, Position)
+
 
 data Cell = Obstacle | TrailPart | Pass deriving Eq
 
@@ -92,7 +94,10 @@ data Slope = GradualSlope Rise Run | SteepSlope
 
 data Sequence = EitherSequenceWhere | InfiniteTailWhere
 
-data Part = FinitePart PartLength | PredefinedPart PartBody
+data Part = FinitePart PartLength
+          | MiddlePredefinedPart Cell PartBody
+          | LeftPredefinedPart Cell PartBody
+          | RightPredefinedPart Cell PartBody
 
 
 makeFieldsNoPrefix ''GenerationState
@@ -255,13 +260,44 @@ interpret' (Free track) = do
                 let rise' = round $ fromIntegral maximumDifficultyLevel * rise
                 interpret' $ withGradualDifficultyLevelSlope rise' run
             Sequence InfiniteTailWhere _ -> cycle' .= Free track
-            Part (PredefinedPart body) _ -> do
+            Part (MiddlePredefinedPart cell body) _ -> do
                 width <- fromIntegral <$> asks _trackWidth
-                when (length (head body) == width
-                      && all ((== length (head body)) . length) body
-                     )
-                     $
-                     cells %= (List.prependList body)
+                when (isRectangular body && length (head body) <= width) $ do
+                    let bodyOffset = fromIntegral $ width - length (head body)
+                        leftBodyOffset = bodyOffset `div` 2
+                        rightBodyOffset = bodyOffset - leftBodyOffset
+                        offsettedBody = offsetBody cell
+                                                   (Offset ( leftBodyOffset
+                                                           , rightBodyOffset
+                                                           )
+                                                   )
+                                                   body
+                    cells %= (List.prependList offsettedBody)
+            Part (LeftPredefinedPart cell body) _ -> do
+                width <- fromIntegral <$> asks _trackWidth
+                when (isRectangular body && length (head body) <= width) $ do
+                    let rightBodyOffset = fromIntegral
+                                        $ width - length (head body)
+                        rightOffsettedBody = offsetBody cell
+                                                        (Offset ( 0
+                                                                , rightBodyOffset
+                                                                )
+                                                        )
+                                                        body
+                    cells %= (List.prependList rightOffsettedBody)
+            Part (RightPredefinedPart cell body) _ -> do
+                width <- fromIntegral <$> asks _trackWidth
+                when (isRectangular body && length (head body) <= width)
+                     $ do
+                    let leftBodyOffset = fromIntegral
+                                        $ width - length (head body)
+                        leftOffsettedBody = offsetBody cell
+                                                       (Offset ( leftBodyOffset
+                                                               , 0
+                                                               )
+                                                       )
+                                                       body
+                    cells %= (List.prependList leftOffsettedBody)
     else eitherSequences . _head %= (*> Free (Pure () <$ track))
     interpret' $ _next track
 
@@ -383,5 +419,30 @@ interpretFrom generationState track = runReader initialise defaultOptions
   where
     initialise = execStateT (interpret' track) generationState
 
-predefinedPart :: PartBody -> Track
-predefinedPart body = Free ((Part (PredefinedPart body)) (Pure ()))
+middlePredefinedPart :: Cell -> PartBody -> Track
+middlePredefinedPart cell body
+    =
+    Free ((Part (MiddlePredefinedPart cell body)) (Pure ()))
+
+isRectangular :: PartBody -> Bool
+isRectangular body
+    =
+    not (null $ head body) && all ((== length (head body)) . length) body
+
+leftPredefinedPart :: Cell -> PartBody -> Track
+leftPredefinedPart cell body
+    =
+    Free ((Part (LeftPredefinedPart cell body)) (Pure ()))
+
+offsetBody :: Cell -> Offset -> PartBody -> PartBody
+offsetBody cell (Offset (left, right))
+    =
+    (^.. each . to ((++ replicate right'' cell) . (replicate left'' cell ++)))
+  where
+    left'' = fromIntegral left
+    right'' = fromIntegral right
+
+rightPredefinedPart :: Cell -> PartBody -> Track
+rightPredefinedPart cell body
+    =
+    Free ((Part (RightPredefinedPart cell body)) (Pure ()))
