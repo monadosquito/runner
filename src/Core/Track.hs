@@ -1,5 +1,5 @@
 module Core.Track ( Track.Track
-                  , Track.finitePart
+                  , Track.staticLengthFinitePart
                   , Track.withDifficultyLevel
                   , Track.withAlteredDifficultyLevel
                   , Track.withDifficultyLevelAmount
@@ -16,6 +16,7 @@ module Core.Track ( Track.Track
                   , Track.rightPredefinedPart
                   , Track.Cell (..)
                   , Track.repeatedSequenceWhere
+                  , Track.dynamicLengthFinitePart
                   ) where
 
 

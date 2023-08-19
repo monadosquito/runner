@@ -51,7 +51,7 @@ type Count = Natural
 
 newtype Boundaries = Boundaries {_un_ :: (Position, Position)}
 
-newtype Range = Range (Probability, Probability)
+newtype Range a = Range (a, a)
 
 newtype Offset = Offset (Position, Position)
 
@@ -100,10 +100,11 @@ data Sequence = EitherSequenceWhere
               | InfiniteTailWhere
               | RepeatedSequenceWhere Count
 
-data Part = FinitePart PartLength
+data Part = StaticLengthFinitePart PartLength
           | MiddlePredefinedPart Cell PartBody
           | LeftPredefinedPart Cell PartBody
           | RightPredefinedPart Cell PartBody
+          | DynamicLengthFinitePart (Range PartLength)
 
 data MarkedSequence = EitherSequence | RepeatedSequence Count
 
@@ -220,7 +221,7 @@ interpret' (Free track) = do
     case markedSequence' of
         Nothing -> do
             case track of
-                Part (FinitePart length') _ -> do
+                Part (StaticLengthFinitePart length') _ -> do
                     difficultyLevelSlope' <- use $ difficulty . levelSlope
                     case difficultyLevelSlope' of
                         GradualSlope rise run -> do
@@ -232,11 +233,11 @@ interpret' (Free track) = do
                                                 $ length' `div` run
                                 interpret' . replicateM_ piecesCount $ do
                                     withAlteredDifficultyLevel rise
-                                    finitePart run
+                                    staticLengthFinitePart run
                                 difficulty . levelSlope .= difficultyLevelSlope'
                             else do
                                 difficulty . levelSlope .= SteepSlope
-                                interpret' $ finitePart length'
+                                interpret' $ staticLengthFinitePart length'
                         SteepSlope
                             ->
                             replicateM_ (fromIntegral length') generateLine
@@ -325,6 +326,13 @@ interpret' (Free track) = do
                                                            )
                                                            body
                         cells %= (List.prependList leftOffsettedBody)
+                Part (DynamicLengthFinitePart (Range range)) _ -> do
+                    previousGenerator <- use generator
+                    let range' = range & each %~ fromIntegral @Natural @Int
+                        (length', nextGenerator) = randomR range'
+                                                           previousGenerator
+                    generator .= nextGenerator
+                    interpret' . staticLengthFinitePart $ fromIntegral length'
         Just EitherSequence
             ->
             eitherSequences . _head %= (*> Free (Pure () <$ track))
@@ -352,8 +360,10 @@ selectNextTrailPartPosition = do
             return $ Just (fromIntegral next')
         Nothing -> return Nothing
 
-finitePart :: PartLength -> Track
-finitePart length' = Free (Part (FinitePart length') (Pure ()))
+staticLengthFinitePart :: PartLength -> Track
+staticLengthFinitePart length'
+    =
+    Free (Part (StaticLengthFinitePart length') (Pure ()))
 
 initialGenerationState :: StdGen -> Reader Options GenerationState
 initialGenerationState generator' = do
@@ -485,3 +495,8 @@ repeatedSequenceWhere :: Count -> Track
 repeatedSequenceWhere count
     =
     Free ((Sequence (RepeatedSequenceWhere count)) (Pure ()))
+
+dynamicLengthFinitePart :: (PartLength, PartLength) -> Track
+dynamicLengthFinitePart range
+    =
+    Free (Part (DynamicLengthFinitePart (Range range)) (Pure ()))

@@ -51,14 +51,15 @@ track smart constructor effects
 
 |Smart constructor                          |Effect                                                                                                                |
 |-------------------------------------------|----------------------------------------------------------------------------------------------------------------------|
+|`dynamicLengthFinitePart`                  |A number, selected within a given range, of track lines is generated.                                                 |
 |`eitherSequenceWhere`                      |A following track sequence up to the same or `eitherSequenceEnd` smart constructor can be selected to be generated.   |
-|`finitePart`                               |A given number of track lines is generated.                                                                           |
 |`infiniteTailWhere`                        |A following track sequence is repeated infinitely.                                                                    |
 |`leftPredefinedPart`                       |Given track lines offsetted from the left with a given `Core.Track.Cell` value are appended to a track.               |
 |`middlePredefinedPart`                     |Given track lines offsetted from both sides with a given `Core.Track.Cell` value are appended to a track.             |
 |`rightPredefinedPart`                      |Given track lines offsetted from the right with a given `Core.Track.Cell` value are appended to a track.              |
 |`repeatedSequenceWhere`                    |A following track sequence is repeated a given number of times.                                                       |
 |`sequenceEnd`                              |A previous sequence is generated.                                                                                     |
+|`staticLengthFinitePart`                   |A given number of track lines is generated.                                                                           |
 |`withAlteredDifficultyLevel`               |A given integer is added to a current difficulty level.                                                               |
 |`withAmountAlteredDifficultyLevel`         |A given maximum difficulty level amount is added to a current difficulty level.                                       |
 |`withDifficultyLevel`                      |A given track difficulty level is set as a current one.                                                               |

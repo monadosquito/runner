@@ -16,15 +16,15 @@ track1 = repeatedSequenceWhere 2
        *> sequenceEnd
        *> eitherSequenceWhere
        *> withProbability 0.9
-       *> finitePart 10
+       *> dynamicLengthFinitePart (5, 15)
        *> eitherSequenceWhere
        *> withAmountAlteredDifficultyLevel 0.5
        *> withProbability 0.1
-       *> finitePart 10
+       *> dynamicLengthFinitePart (5, 10)
        *> sequenceEnd
        *> withGradualDifficultyLevelAmountRiseSlope 0.1 2
-       *> finitePart 10
+       *> staticLengthFinitePart 10
        *> withSteepDifficultyLevelSlope
-       *> finitePart 10
+       *> staticLengthFinitePart 10
        *> infiniteTailWhere
-       *> finitePart 10
+       *> staticLengthFinitePart 10
