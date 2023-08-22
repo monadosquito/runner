@@ -25,6 +25,8 @@ import Data.Monoid
 
 import Core.Constraint
 
+import Data.Foldable
+
 
 type PartLength = Natural
 
@@ -116,16 +118,15 @@ makeFieldsNoPrefix ''Difficulty
 
 generateLine :: StateT GenerationState (Reader Options) ()
 generateLine = do
-    trailPartPosition <- selectNextTrailPartPosition
-    case trailPartPosition of
-        Just trailPartPosition' -> do
-            cells . List._head
-                  . element (fromIntegral trailPartPosition')
-                  .= TrailPart
-            line <- (& element (fromIntegral trailPartPosition') .~ TrailPart)
-                 <$> (lift generateObstacleLine >>= scatter Pass)
-            cells %= (line List.<|)
-        Nothing -> return ()
+    trailPartPositions <- selectNextTrailPartPositions
+    line <- trail trailPartPositions
+         =<< scatter Pass
+         =<< lift generateObstacleLine
+    forM_ trailPartPositions $ \trailPartPosition' ->
+        cells . List._head
+              . element (fromIntegral trailPartPosition')
+              .= TrailPart
+    cells %= (line List.<|)
 
 generateObstacleLine :: Reader Options [Cell]
 generateObstacleLine = do
@@ -341,24 +342,43 @@ interpret' (Free track) = do
             repeatedSequence %= (*> Free (Pure () <$ track))
     interpret' $ _next track
 
-selectNextTrailPartPosition :: StateT GenerationState (Reader Options)
-                                                      (Maybe Position)
-selectNextTrailPartPosition = do
-    previous <- ((fromIntegral <$>) . findIndex (== TrailPart))
-             <$> use (cells . List._head)
-    case previous of
-        Just previous' -> do
-            shiftBoundaries <- lift
-                            $ ((& each %~ fromIntegral @Natural @Int)
-                               . (^. un_)
+selectNextTrailPartPositions :: StateT GenerationState (Reader Options)
+                                                       [Position]
+selectNextTrailPartPositions = do
+    previouses <- ((fromIntegral <$>) . findIndices (== TrailPart))
+               <$> use (cells . List._head)
+    difficultyLevel' <- asks _trackDifficultyLevel
+    previousGenerator <- use generator
+    width <- asks _trackWidth
+    let (currentCount, nextGenerator) = randomR (0, maximumCount)
+                                                previousGenerator
+        (parity, newGenerator') = randomR (0, 1) nextGenerator
+        maximumCount = fromIntegral $ width - difficultyLevel'
+    generator .= newGenerator'
+    parityIndices <- replicateM currentCount $ do
+        previousGenerator' <- use generator
+        let (parityIndex, nextGenerator'') = randomR ( 0
+                                                     , length previouses `div` 2
+                                                     )
+                                                     previousGenerator'
+        generator .= nextGenerator''
+        return $ fromIntegral parityIndex
+    let theForked = concatMap (\(previous, index')
+                               ->
+                               if index' * 2 - parity `elem` parityIndices
+                               then replicate 2 previous
+                               else [previous]
                               )
-                            <$> getShiftBoundaries previous'
-            previousGenerator <- use generator
-            let (next', nextGenerator) = randomR shiftBoundaries
-                                                 previousGenerator
-            generator .= nextGenerator
-            return $ Just (fromIntegral next')
-        Nothing -> return Nothing
+                              $ zip previouses [0..length previouses - 1]
+    forM theForked $ \forked -> do
+        shiftBoundaries <- lift
+                        $ ((& each %~ fromIntegral @Natural @Int) . (^. un_))
+                        <$> getShiftBoundaries forked
+        previousGenerator' <- use generator
+        let (next', nextGenerator'') = randomR shiftBoundaries
+                                               previousGenerator'
+        generator .= nextGenerator''
+        return $ fromIntegral next'
 
 staticLengthFinitePart :: PartLength -> Track
 staticLengthFinitePart length'
@@ -500,3 +520,10 @@ dynamicLengthFinitePart :: (PartLength, PartLength) -> Track
 dynamicLengthFinitePart range
     =
     Free (Part (DynamicLengthFinitePart (Range range)) (Pure ()))
+
+trail :: [Position] -> [Cell] -> StateT GenerationState (Reader Options) [Cell]
+trail = flip (foldrM (\index' line'
+                      ->
+                      pure $ line' & element (fromIntegral index') .~ TrailPart
+                     )
+             )

@@ -94,9 +94,9 @@ options
         <td><code>--track-difficulty-level</code> (<code>-d</code>)</td>
         <td><code>trackDifficultyLevel</code></td>
         <td>
-            a number defining a maximum number of
-            <code>Core.Track.Cell.Pass</code> values generated for a single
-            track line
+            a number defining maximum numbers of
+            <code>Core.Track.Cell.Pass</code> values in a single track line and
+            track trails in a track
         </td>
     <tr>
         <td>Track name</td>
