@@ -15,6 +15,7 @@ instance Show RndredTrackCell where
     show (RndredTrackCell Obstacle) = "="
     show (RndredTrackCell TrailPart) = "."
     show (RndredTrackCell Pass) = ","
+    show (RndredTrackCell Character) = "x"
 
 newtype RndredTrackLines = RndredTrackLines [[Cell]]
 instance Show RndredTrackLines where

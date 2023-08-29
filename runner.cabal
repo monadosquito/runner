@@ -45,3 +45,6 @@ executable runner
         Core.Track.Configuration,
         Core.Track.Configuration.Configuration,
         Core.Constraint,
+        Core.Character.Character,
+        Core.Signal.Signal,
+        Core.Track.Character.Character,

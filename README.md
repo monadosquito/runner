@@ -1,3 +1,8 @@
+# Play
+
+- Press the `a` or left arrow key to strafe left.
+- Press the `d` or right arrow key to strafe right.
+
 # Create Tracks
 
 - Define top-level bindings of tracks one of which is `defaultTrack` in the

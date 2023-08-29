@@ -45,6 +45,8 @@ type PartBody = [[Cell]]
 
 type Count = Natural
 
+type RowIndex = Natural
+
 
 newtype Boundaries = Boundaries {_un_ :: (ColumnIndex, ColumnIndex)}
 
@@ -53,7 +55,7 @@ newtype Range a = Range (a, a)
 newtype Offset = Offset (ColumnIndex, ColumnIndex)
 
 
-data Cell = Obstacle | TrailPart | Pass deriving Eq
+data Cell = Obstacle | TrailPart | Pass | Character deriving Eq
 
 data GenerationState = GenerationState { _generator :: StdGen
                                        , _eitherSequences :: [Track]
