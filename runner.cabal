@@ -33,7 +33,6 @@ executable runner
         Core.Track.Track,
         Core.Port.Renderer,
         Driver.Renderer.Cnsl,
-        Lens.List.NonEmpty,
         Core.Configuration,
         Core.Configuration.Configuration,
         Core.Port.Environment,

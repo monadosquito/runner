@@ -5,8 +5,6 @@ module Driver.Renderer.Cnsl ( Cnsl
 import Core.Port.Renderer
 import Core.Track.Track
 
-import Data.List.NonEmpty
-
 
 data Cnsl
 instance Renderer Cnsl where
@@ -18,7 +16,7 @@ instance Show RndredTrackCell where
     show (RndredTrackCell TrailPart) = "."
     show (RndredTrackCell Pass) = ","
 
-newtype RndredTrackLines = RndredTrackLines (NonEmpty [Cell])
+newtype RndredTrackLines = RndredTrackLines [[Cell]]
 instance Show RndredTrackLines where
     show (RndredTrackLines lines')
         =

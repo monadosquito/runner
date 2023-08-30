@@ -9,15 +9,12 @@
 module Core.Track.Track where
 
 
-import qualified Lens.List.NonEmpty as List
-
 import Control.Lens
 import Control.Monad.Free
 import Control.Monad.State
 import Data.List
 import Numeric.Natural
 import System.Random
-import qualified Data.List.NonEmpty as List
 
 import Core.Configuration.Configuration
 import Control.Monad.Reader
@@ -60,7 +57,7 @@ newtype Offset = Offset (Position, Position)
 
 data Cell = Obstacle | TrailPart | Pass deriving Eq
 
-data GenerationState = GenerationState { _cells :: List.NonEmpty [Cell]
+data GenerationState = GenerationState { _cells :: [[Cell]]
                                        , _generator :: StdGen
                                        , _difficulty :: Difficulty
                                        , _eitherSequences :: [Track]
@@ -124,10 +121,10 @@ generateLine = do
          =<< scatter Pass
          =<< lift generateObstacleLine
     forM_ trailPartPositions $ \trailPartPosition' ->
-        cells . List._head
+        cells . _head
               . element (fromIntegral trailPartPosition')
               .= TrailPart
-    cells %= (line List.<|)
+    cells %= (line :)
 
 generateObstacleLine :: Reader Options [Cell]
 generateObstacleLine = do
@@ -311,7 +308,7 @@ interpret' (Free track) = do
                                                                )
                                                        )
                                                        body
-                        cells %= (`List.appendList` offsettedBody)
+                        cells %= (offsettedBody ++)
                 Part (LeftPredefinedPart cell body) _ -> do
                     width <- fromIntegral <$> asks _trackWidth
                     when (isRectangular body && length (head body) <= width) $ do
@@ -323,7 +320,7 @@ interpret' (Free track) = do
                                                                     )
                                                             )
                                                             body
-                        cells %= (`List.appendList` rightOffsettedBody)
+                        cells %= (rightOffsettedBody ++)
                 Part (RightPredefinedPart cell body) _ -> do
                     width <- fromIntegral <$> asks _trackWidth
                     when (isRectangular body && length (head body) <= width)
@@ -336,7 +333,7 @@ interpret' (Free track) = do
                                                                    )
                                                            )
                                                            body
-                        cells %= (`List.appendList` leftOffsettedBody)
+                        cells %= (leftOffsettedBody ++)
                 Part (DynamicLengthFinitePart (Range range)) _ -> do
                     previousGenerator <- use generator
                     let range' = range & each %~ fromIntegral @Natural @Int
@@ -357,7 +354,7 @@ selectNextTrailPartPositions :: StateT GenerationState (Reader Options)
                                                        [Position]
 selectNextTrailPartPositions = do
     previouses <- ((fromIntegral <$>) . findIndices (== TrailPart))
-               <$> use (cells . List._head)
+               <$> use (cells . _head)
     difficultyLevel' <- asks _trackDifficultyLevel
     previousGenerator <- use generator
     width <- asks _trackWidth
@@ -400,7 +397,7 @@ initialGenerationState :: StdGen -> Reader Options GenerationState
 initialGenerationState generator' = do
     startLine <- generateStartLine
     startPartLength' <- fromIntegral <$> asks _trackStartPartLength
-    let startPart = startLine List.:| replicate (startPartLength' - 1) startLine
+    let startPart = replicate startPartLength' startLine
     difficultyLevel' <- asks _trackDifficultyLevel
     return $ GenerationState startPart
                              generator'
