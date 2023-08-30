@@ -120,9 +120,9 @@ generateLine = do
     line <- trail trailPartPositions
          =<< scatter Pass
          =<< lift generateObstacleLine
-    forM_ trailPartPositions $ \trailPartPosition' ->
+    forM_ trailPartPositions $ \trailPartPosition ->
         cells . _head
-              . element (fromIntegral trailPartPosition')
+              . element (fromIntegral trailPartPosition)
               .= TrailPart
     cells %= (line :)
 
@@ -531,8 +531,8 @@ dynamicLengthFinitePart range
     Free (Part (DynamicLengthFinitePart (Range range)) (Pure ()))
 
 trail :: [Position] -> [Cell] -> StateT GenerationState (Reader Options) [Cell]
-trail = flip (foldrM (\index' line'
+trail = flip (foldrM (\index' line
                       ->
-                      pure $ line' & element (fromIntegral index') .~ TrailPart
+                      pure $ line & element (fromIntegral index') .~ TrailPart
                      )
              )
