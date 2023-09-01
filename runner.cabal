@@ -23,6 +23,8 @@ executable runner
         nonempty-containers,
         text,
         optparse-applicative,
+        brick,
+        vty,
     default-language: Haskell2010
     ghc-options: -Wall
     hs-source-dirs: src,
@@ -48,3 +50,5 @@ executable runner
         Core.Character.Character,
         Core.Signal.Signal,
         Core.Track.Character.Character,
+        Core.Port.Driver,
+        Driver.Driver.Brick,

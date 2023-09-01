@@ -29,8 +29,8 @@ progress (Position (rowIndex, columnIndex))
     =
     Position (rowIndex + 1, columnIndex)
 
-strafe :: Position -> Side -> Reader Options Position
-strafe (Position (rowIndex, columnIndex)) side = do
+strafe :: Side -> Position -> Reader Options Position
+strafe side (Position (rowIndex, columnIndex)) = do
     Boundaries shiftBoundaries <- getShiftBoundaries columnIndex
     return $ Position (case side of
                            Left' -> (rowIndex, fst shiftBoundaries)
