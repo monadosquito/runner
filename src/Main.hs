@@ -39,7 +39,8 @@ import Core.Track.Track
 data FlowInput = FlowInput { trackCells :: Maybe (List.NonEmpty [Cell])
                            , trackPiecesCnt
                            , trackPieceCap
-                           , trackCycleLen :: Int
+                           , trackCycleLen
+                           , trackCyclePiecesCnt :: Int
                            , trackRem :: Maybe (List.NonEmpty [Cell])
                            , interpretFrom' :: GenerationState
                                             -> Track
@@ -59,7 +60,6 @@ main = do
             threadDelay 1000000
         rndr trackRem
         when (trackCycleLen > 0) . forever $ do
-            let trackCyclePiecesCnt = trackCycleLen `div` trackPieceCap
             forM_ [0..trackCyclePiecesCnt - 1] $ \ix' -> do
                 trackCycle' <- genTrackCycle interpretFrom'
                                              trackGenState
@@ -91,6 +91,7 @@ main = do
                           . cells
                           . to List.length
                           ^. non 0
+            trackCyclePiecesCnt = trackCycleLen `div` trackPieceCap
         trackGenStateRef <- newIORef trackGenState
         flow FlowInput {..}
     rndr (Just trackPiece) = render (Proxy @Cnsl) trackPiece
