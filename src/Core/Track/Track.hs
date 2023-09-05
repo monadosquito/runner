@@ -22,8 +22,6 @@ import Data.Monoid
 
 import Core.Constraint
 
-import Data.Foldable
-
 
 type PartLength = Natural
 
@@ -118,8 +116,7 @@ generateRow :: StateT GenerationState (Reader Options) ()
 generateRow = do
     trailPartColumnIndices <- selectNextTrailPartColumns
     row <- trail trailPartColumnIndices
-         =<< scatter Pass
-         =<< lift generateObstacleRow
+        <$> (scatter Pass =<< lift generateObstacleRow)
     forM_ trailPartColumnIndices $ \index' ->
         rows . _head
              . element (fromIntegral index')
@@ -530,11 +527,9 @@ dynamicLengthFinitePart range
     =
     Free (Part (DynamicLengthFinitePart (Range range)) (Pure ()))
 
-trail :: [ColumnIndex]
-      -> [Cell]
-      -> StateT GenerationState (Reader Options) [Cell]
-trail = flip (foldrM (\index' row
+trail :: [ColumnIndex] -> [Cell] -> [Cell]
+trail = flip (foldr (\index' row
                       ->
-                      pure $ row & element (fromIntegral index') .~ TrailPart
+                      row & element (fromIntegral index') .~ TrailPart
                      )
              )
