@@ -69,34 +69,34 @@ main = do
         let track = tracks' Map.! _trackName (_preferences conf)
             trackCells = rvsTrackCells
             interpret'' = configure $ _options conf
-            trackPiecesCnt = length (_cells trackGenState) `div` trackPieceCap
+            trackPiecesCnt = length (_rows trackGenState) `div` trackPieceCap
             trackRem = drop (trackPieceCap * trackPiecesCnt) rvsTrackCells
             trackPieceCap = conf
                           ^. preferences
                           . trackPieceCapacity
                           . to fromIntegral
             interpretFrom' = configureFrom $ _options conf
-            rvsTrackCells = trackGenState ^. cells . reversed
+            rvsTrackCells = trackGenState ^. rows . reversed
             trackGenState = interpret'' gen track
         let trackCycleLen = trackGenState
                           ^? cycle'
                           . _Free
                           . to (interpret gen . Free)
-                          . cells
+                          . rows
                           . to length
                           ^. non 0
             trackCyclePiecesCnt = trackCycleLen `div` trackPieceCap
         trackGenStateRef <- newIORef trackGenState
         flow FlowInput {..}
-    rndrTrackPiece ix' cap cells' = do
-        let trackPiece = take cap $ drop (ix' * cap) cells'
+    rndrTrackPiece ix' cap rows' = do
+        let trackPiece = take cap $ drop (ix' * cap) rows'
         render (Proxy @Cnsl) trackPiece
     genTrackCycle interpretFrom' trackGenState trackGenStateRef = do
         gen' <- newStdGen
-        trackStartLine <- (^. cells . _head) <$> readIORef trackGenStateRef
-        let contTrackGenState = trackGenState & cells .~ pure trackStartLine
+        trackStartLine <- (^. rows . _head) <$> readIORef trackGenStateRef
+        let contTrackGenState = trackGenState & rows .~ pure trackStartLine
                                               & generator .~ gen'
             newTrackGenState = interpretFrom' contTrackGenState
                                               $ _cycle' trackGenState
         writeIORef trackGenStateRef newTrackGenState
-        return $ newTrackGenState ^. cells . _tail . reversed
+        return $ newTrackGenState ^. rows . _tail . reversed

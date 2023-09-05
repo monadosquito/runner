@@ -18,8 +18,8 @@ configure options' generator' track = runReader initialise
                                     $ Configuration.fix options'
   where
     initialise = do
-         generationState <- initialGenerationState generator'
-         State.execStateT (interpret' track) generationState
+         initialGenerationState <- initialiseGenerationState generator'
+         State.execStateT (interpret' track) initialGenerationState
 
 configureFrom :: Options -> GenerationState -> Track -> GenerationState
 configureFrom options' generationState track = runReader initialise

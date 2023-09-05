@@ -42,7 +42,7 @@ makeFieldsNoPrefix ''Preferences
 
 defaultPreferences :: Preferences
 defaultPreferences = Preferences { _trackName = "default"
-                                 , _configurationFilePath = "configuration.json"
+                                 , _configurationFilePath = "conf.json"
                                  , _trackPieceCapacity = 10
                                  }
 

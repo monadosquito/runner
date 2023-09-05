@@ -8,4 +8,4 @@ import Data.Proxy
 
 
 class Parser p where
-    parseConfiguration :: Proxy p -> ByteString -> Configuration
+    deserialiseConfiguration :: Proxy p -> ByteString -> Configuration

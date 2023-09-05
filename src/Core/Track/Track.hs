@@ -27,7 +27,7 @@ import Data.Foldable
 
 type PartLength = Natural
 
-type Position = Natural
+type ColumnIndex = Natural
 
 type Track = Free Track' ()
 
@@ -48,16 +48,16 @@ type PartBody = [[Cell]]
 type Count = Natural
 
 
-newtype Boundaries = Boundaries {_un_ :: (Position, Position)}
+newtype Boundaries = Boundaries {_un_ :: (ColumnIndex, ColumnIndex)}
 
 newtype Range a = Range (a, a)
 
-newtype Offset = Offset (Position, Position)
+newtype Offset = Offset (ColumnIndex, ColumnIndex)
 
 
 data Cell = Obstacle | TrailPart | Pass deriving Eq
 
-data GenerationState = GenerationState { _cells :: [[Cell]]
+data GenerationState = GenerationState { _rows :: [[Cell]]
                                        , _generator :: StdGen
                                        , _difficulty :: Difficulty
                                        , _eitherSequences :: [Track]
@@ -114,31 +114,31 @@ makeFieldsNoPrefix ''Boundaries
 makeFieldsNoPrefix ''Difficulty
 
 
-generateLine :: StateT GenerationState (Reader Options) ()
-generateLine = do
-    trailPartPositions <- selectNextTrailPartPositions
-    line <- trail trailPartPositions
+generateRow :: StateT GenerationState (Reader Options) ()
+generateRow = do
+    trailPartColumnIndices <- selectNextTrailPartColumns
+    row <- trail trailPartColumnIndices
          =<< scatter Pass
-         =<< lift generateObstacleLine
-    forM_ trailPartPositions $ \trailPartPosition ->
-        cells . _head
-              . element (fromIntegral trailPartPosition)
-              .= TrailPart
-    cells %= (line :)
+         =<< lift generateObstacleRow
+    forM_ trailPartColumnIndices $ \index' ->
+        rows . _head
+             . element (fromIntegral index')
+             .= TrailPart
+    rows %= (row :)
 
-generateObstacleLine :: Reader Options [Cell]
-generateObstacleLine = do
+generateObstacleRow :: Reader Options [Cell]
+generateObstacleRow = do
     width <- asks _trackWidth
     return $ replicate (fromIntegral width) Obstacle
 
-generateStartLine :: Reader Options [Cell]
-generateStartLine = do
+generateStartRow :: Reader Options [Cell]
+generateStartRow = do
     width <- asks _trackWidth
     return $ replicate (fromIntegral width) Obstacle
            & element (fromIntegral $ width `div` 2)
            .~ TrailPart
 
-getShiftBoundaries :: Position -> Reader Options Boundaries
+getShiftBoundaries :: ColumnIndex -> Reader Options Boundaries
 getShiftBoundaries 0 = pure $ Boundaries (0, 1)
 getShiftBoundaries position = do
     width <- asks _trackWidth
@@ -150,8 +150,8 @@ interpret :: StdGen -> Track -> GenerationState
 interpret generator' track = runReader initialise defaultOptions
   where
     initialise = do
-         generationState <- initialGenerationState generator'
-         execStateT (interpret' track) generationState
+         initialGenerationState <- initialiseGenerationState generator'
+         execStateT (interpret' track) initialGenerationState
 
 interpret' :: Track -> StateT GenerationState (Reader Options) ()
 interpret' (Pure _) = pure ()
@@ -248,7 +248,7 @@ interpret' (Free track) = do
                                 staticLengthFinitePart run
                         SteepSlope
                             ->
-                            replicateM_ (fromIntegral length') generateLine
+                            replicateM_ (fromIntegral length') generateRow
                 Condition (WithDifficultyLevel level') _ -> do
                     maximumDifficultyLevel <- asks _trackWidth
                     difficulty . level .= if level' <= maximumDifficultyLevel
@@ -296,7 +296,7 @@ interpret' (Free track) = do
                 Sequence InfiniteTailWhere _ -> cycle' .= Free track
                 Part (MiddlePredefinedPart cell body) _ -> do
                     width <- fromIntegral <$> asks _trackWidth
-                    when (isRectangular body && length (head body) <= width)
+                    when (rectangular body && length (head body) <= width)
                          $ do
                         let bodyOffset = fromIntegral
                                        $ width - length (head body)
@@ -308,10 +308,10 @@ interpret' (Free track) = do
                                                                )
                                                        )
                                                        body
-                        cells %= (offsettedBody ++)
+                        rows %= (offsettedBody ++)
                 Part (LeftPredefinedPart cell body) _ -> do
                     width <- fromIntegral <$> asks _trackWidth
-                    when (isRectangular body && length (head body) <= width) $ do
+                    when (rectangular body && length (head body) <= width) $ do
                         let rightBodyOffset = fromIntegral
                                             $ width - length (head body)
                             rightOffsettedBody = offsetBody cell
@@ -320,10 +320,10 @@ interpret' (Free track) = do
                                                                     )
                                                             )
                                                             body
-                        cells %= (rightOffsettedBody ++)
+                        rows %= (rightOffsettedBody ++)
                 Part (RightPredefinedPart cell body) _ -> do
                     width <- fromIntegral <$> asks _trackWidth
-                    when (isRectangular body && length (head body) <= width)
+                    when (rectangular body && length (head body) <= width)
                          $ do
                         let leftBodyOffset = fromIntegral
                                            $ width - length (head body)
@@ -333,7 +333,7 @@ interpret' (Free track) = do
                                                                    )
                                                            )
                                                            body
-                        cells %= (leftOffsettedBody ++)
+                        rows %= (leftOffsettedBody ++)
                 Part (DynamicLengthFinitePart (Range range)) _ -> do
                     previousGenerator <- use generator
                     let range' = range & each %~ fromIntegral @Natural @Int
@@ -350,11 +350,11 @@ interpret' (Free track) = do
                               %= (*> Free (Pure () <$ track))
     interpret' $ _next track
 
-selectNextTrailPartPositions :: StateT GenerationState (Reader Options)
-                                                       [Position]
-selectNextTrailPartPositions = do
+selectNextTrailPartColumns :: StateT GenerationState (Reader Options)
+                                                     [ColumnIndex]
+selectNextTrailPartColumns = do
     previouses <- ((fromIntegral <$>) . findIndices (== TrailPart))
-               <$> use (cells . _head)
+               <$> use (rows . _head)
     difficultyLevel' <- asks _trackDifficultyLevel
     previousGenerator <- use generator
     width <- asks _trackWidth
@@ -393,11 +393,11 @@ staticLengthFinitePart length'
     =
     Free (Part (StaticLengthFinitePart length') (Pure ()))
 
-initialGenerationState :: StdGen -> Reader Options GenerationState
-initialGenerationState generator' = do
-    startLine <- generateStartLine
+initialiseGenerationState :: StdGen -> Reader Options GenerationState
+initialiseGenerationState generator' = do
+    startRow <- generateStartRow
     startPartLength' <- fromIntegral <$> asks _trackStartPartLength
-    let startPart = replicate startPartLength' startLine
+    let startPart = replicate startPartLength' startRow
     difficultyLevel' <- asks _trackDifficultyLevel
     return $ GenerationState startPart
                              generator'
@@ -409,7 +409,7 @@ initialGenerationState generator' = do
                              Nothing
                              0
 
-generatePassPosition :: StateT GenerationState (Reader Options) Position
+generatePassPosition :: StateT GenerationState (Reader Options) ColumnIndex
 generatePassPosition = do
     previousGenerator <- use generator
     width <- asks _trackWidth
@@ -419,22 +419,22 @@ generatePassPosition = do
     return $ fromIntegral position
 
 scatter :: Cell -> [Cell] -> StateT GenerationState (Reader Options) [Cell]
-scatter cell line = do
+scatter cell row = do
     difficultyLevel' <- use $ difficulty . level
     width <- asks _trackWidth
     passPositions <- replicateM (fromIntegral $ width - difficultyLevel')
                                 generatePassPosition
-    return $ line & traversed
-                  . withIndex
-                  . filteredBy (_1
-                                . to ((`find` passPositions)
-                                      . (==)
-                                      . fromIntegral
-                                     )
-                                . _Just
-                               )
-                  <. _2
-                  .~ cell
+    return $ row & traversed
+                 . withIndex
+                 . filteredBy (_1
+                               . to ((`find` passPositions)
+                                     . (==)
+                                     . fromIntegral
+                                    )
+                               . _Just
+                              )
+                 <. _2
+                 .~ cell
 
 withDifficultyLevel :: DifficultyLevel -> Track
 withDifficultyLevel level'
@@ -499,8 +499,8 @@ middlePredefinedPart cell body
     =
     Free ((Part (MiddlePredefinedPart cell body)) (Pure ()))
 
-isRectangular :: PartBody -> Bool
-isRectangular body = all ((== length (head body)) . length) body
+rectangular :: PartBody -> Bool
+rectangular body = all ((== length (head body)) . length) body
 
 leftPredefinedPart :: Cell -> PartBody -> Track
 leftPredefinedPart cell body
@@ -530,9 +530,11 @@ dynamicLengthFinitePart range
     =
     Free (Part (DynamicLengthFinitePart (Range range)) (Pure ()))
 
-trail :: [Position] -> [Cell] -> StateT GenerationState (Reader Options) [Cell]
-trail = flip (foldrM (\index' line
+trail :: [ColumnIndex]
+      -> [Cell]
+      -> StateT GenerationState (Reader Options) [Cell]
+trail = flip (foldrM (\index' row
                       ->
-                      pure $ line & element (fromIntegral index') .~ TrailPart
+                      pure $ row & element (fromIntegral index') .~ TrailPart
                      )
              )

@@ -63,7 +63,7 @@ instance Environment Sys where
                  $ info (readConf defaultConfiguration <**> helper)
                         fullDesc
         fileConf <- catch @IOException
-                          (parseConfiguration parser
+                          (deserialiseConfiguration parser
                            <$> ByteString.readFile (argConf
                                                     ^. preferences
                                                     . configurationFilePath

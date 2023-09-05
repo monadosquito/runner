@@ -15,7 +15,7 @@ import Control.Monad.State
 
 data Aeson
 instance Parser Aeson where
-    parseConfiguration _ conf
+    deserialiseConfiguration _ conf
         =
         let dfltNotSetOpts = dfltNotSetOpt "trackName"
                                            (preferences . trackName)
