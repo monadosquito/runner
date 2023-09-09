@@ -15,7 +15,7 @@ import Control.Monad.Reader
 newtype Position = Position (RowIndex, ColumnIndex)
 
 
-data Side = Left' | Right'
+data Side = Left' | Right' deriving Eq
 
 
 makeFieldsNoPrefix ''Position

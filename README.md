@@ -1,7 +1,41 @@
 # Play
 
-- Press the `a` or left arrow key to strafe left.
-- Press the `d` or right arrow key to strafe right.
+1. Navigate through the menus using the [menu actions key
+   bindings](#table-3).
+2. Select the `Start` item of the `Main` menu.
+3. Control the character using the [default character action key
+   bindings](#table-4) or [custom ones](#custom-character-key-bindings).
+
+## Hints
+
+- To restart a racing,
+    1. Return to the `Main` menu.
+    2. Select the `Start` menu item.
+
+# Key Bindings
+
+## Add
+
+1. Select the `Key Bindings` item of the `Main` menu.
+2. Select an action whose key bindings are to be changed.
+3. Press keys to bind to the selected action.
+4. Press the enter key to stop adding new key bindings.
+
+## Clear
+
+1. Select the `Key Bindings` item of the `Main` menu.
+2. Navigate to an action whose key bindings are to be cleared.
+3. Press the backspace key to clear it.
+
+## Restore
+
+1. Navigate to the `Key Bindings` item of the `Main` menu.
+2. Press the backspace key to restore default key bindings.
+
+## Notes
+
+- If the same key is bound to two actions, then it is bound only to a former
+  one.
 
 # Create Tracks
 
@@ -47,6 +81,11 @@ configuration file or as command arguments.
   configuration file.
 - If a configuration file whose particular key is set to a value is present,
   then the key is used from it, otherwise a [default value](#table-2) is used.
+
+# Hints
+
+- A currently selected menu item is marked with the `*` character to the left
+  of it.
 
 ---
 
@@ -136,3 +175,25 @@ options
         </td>
     </tr>
 </table>
+
+# Table 3
+
+menu actions key bindings
+
+|Menu actions                                                     |Keys bindings            |
+|-----------------------------------------------------------------|-------------------------|
+|to clear a selected character action, to restore all key bindings|the backspace key        |
+|to navigate to an upper item                                     |the top key, the w key   |
+|to navigate to a lower item                                      |the bottom key, the s key|
+|to return to a previously selected page, to toggle the pause mode|the escape key           |
+|to select a currently navigated item                             |the enter key            |
+|to quit                                                          |the q key                |
+
+# Table 4
+
+character action key bindings
+
+|Character action|Default key bindings    |
+|----------------|------------------------|
+|to strafe left  |the left key, the a key |
+|to strafe right |the right key, the d key|

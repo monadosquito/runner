@@ -4,6 +4,8 @@
 {-# LANGUAGE MultiWayIf #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 
 module Driver.Driver.Brick where
@@ -15,8 +17,6 @@ import Core.Port.Driver
 import Core.Track.Character.Character
 import Core.Track.Configuration.Configuration
 import Core.Track.Track
-
-import Core.Script.Track
 
 import Driver.Renderer.Cnsl
 
@@ -31,20 +31,43 @@ import Control.Monad.Free
 import Control.Monad.Reader
 import Data.IORef
 import System.Random
-import qualified Data.Map.NonEmpty as Map
 import qualified Graphics.Vty as Vty
+import Data.Maybe
 
+import Core.Signal.Signal
+
+import Core.Script.Track
+
+import Brick.Keybindings.Pretty
+import qualified Data.List as List
+import qualified Data.Map.NonEmpty as Map
+import qualified Data.Text as Text
+
+
+data Page = RacePage | KBindsPage deriving (Bounded, Enum, Eq, Ord)
+instance Show Page where
+    show RacePage = "Start"
+    show KBindsPage = "Key Bindings"
 
 data GlobState = GlobState { _currTrackCycPiecesCnt
                            , _currTrackCycRemRowsCnt :: Int
+                           , _flowThreadId
+                           , _sessThreadId :: Maybe ThreadId
+                           , _paused
+                           , _started :: Bool
                            }
 
 data LocState = LocState { _charPos :: Position
                          , _track :: State
+                         , _actPage :: Maybe Page
+                         , _kBinds :: [([Vty.Key], Signal)]
+                         , _kBindsAdded :: Bool
+                         , _slctMenuItemIx :: Int
                          }
 
 
 makeFieldsNoPrefix ''LocState
+makeFieldsNoPrefix ''GlobState
 
 
 data Brick
@@ -63,40 +86,49 @@ instance Driver Brick where
                 currTrackInf = is _Free currTrackCyc
                 interpret'' = configure opts
                 currTrackState = interpret'' currTrack gen
-                               & rows %~ reverse
                 currTrackRowsCnt = currTrackState ^. rows . to length
                 currTrackPiecesCnt = currTrackRowsCnt `div` trackPieceCap
                 currTrackRemRowsCnt = currTrackRowsCnt
                                     `mod` trackPieceCap
-                                    + currTrackPiecesCnt
+                                    + (currTrackPiecesCnt - 1)
                 trackRowTime = round $ 1 / progressSpeed * 1000000
             evChan <- newBChan 10
             globStateRef <- newIORef initGlobState
-            void . forkIO $ do
-                replicateM_ currTrackPiecesCnt $ do
-                    replicateM_ trackPieceCap $ do
-                        threadDelay trackRowTime
-                        writeBChan evChan FeedTrackRow
-                    writeBChan evChan FeedTrackPiece
-                    writeBChan evChan ReturnChar
-                replicateM_ currTrackRemRowsCnt $ do
-                    threadDelay trackRowTime
-                    writeBChan evChan FeedTrackRow
-                if currTrackInf
-                then forever $ do
-                    writeBChan evChan ReturnChar
-                    writeBChan evChan FeedTrackCyc
+            let feedTrackRow = do
                     GlobState {..} <- readIORef globStateRef
-                    replicateM_ _currTrackCycPiecesCnt $ do
-                        replicateM_ trackPieceCap $ do
-                            threadDelay trackRowTime
-                            writeBChan evChan FeedTrackRow
+                    threadDelay trackRowTime
+                    if not _paused
+                    then writeBChan evChan FeedTrackRow
+                    else feedTrackRow
+                start = do
+                    replicateM_ currTrackPiecesCnt $ do
+                        replicateM_ trackPieceCap feedTrackRow
                         writeBChan evChan FeedTrackPiece
                         writeBChan evChan ReturnChar
-                    replicateM_ (_currTrackCycRemRowsCnt + 1) $ do
-                        threadDelay trackRowTime
-                        writeBChan evChan FeedTrackRow
-                else writeBChan evChan Fin
+                    replicateM_ currTrackRemRowsCnt feedTrackRow
+                    if currTrackInf
+                    then forever $ do
+                        writeBChan evChan FeedTrackCyc
+                        writeBChan evChan ReturnChar
+                        GlobState {..} <- readIORef globStateRef
+                        replicateM_ _currTrackCycPiecesCnt $ do
+                            replicateM_ trackPieceCap feedTrackRow
+                            writeBChan evChan FeedTrackPiece
+                            writeBChan evChan ReturnChar
+                        replicateM_ _currTrackCycRemRowsCnt feedTrackRow
+                    else do
+                        modifyIORef globStateRef (& paused .~ True)
+                        writeBChan evChan Fin
+                        writeBChan evChan Start
+            flowThreadId' <- forkIO . forever $ do
+                GlobState {..} <- readIORef globStateRef
+                unless _started $ do
+                    maybe (return ()) killThread _sessThreadId
+                    sessThreadId' <- forkIO start
+                    modifyIORef globStateRef
+                                $ (& started .~ True)
+                                  . (& sessThreadId .~ Just sessThreadId')
+            modifyIORef globStateRef (& flowThreadId .~ Just flowThreadId')
             return (currTrackState, evChan, globStateRef)
         app' <- app globStateRef
         initLocState' <- initLocState currTrackState
@@ -110,25 +142,109 @@ data FlowEvent = FeedTrackRow
                | FeedTrackCyc
                | Fin
                | ReturnChar
+               | Start
+
 
 app :: IORef GlobState -> ReaderT Configuration IO (App LocState FlowEvent ())
 app globStateRef = do
-    conf <- ask
+    draw' <- draw
     hndlEv' <- hndlEv globStateRef
-    return $ App { appDraw = draw conf
+    return $ App { appDraw = draw'
                  , appChooseCursor = neverShowCursor
                  , appHandleEvent = hndlEv'
                  , appStartEvent = pure ()
                  , appAttrMap = const $ attrMap Vty.defAttr []
                  }
 
-draw :: Configuration -> LocState -> [Widget ()]
-draw conf (LocState charPos' trackState)
-    =
-    [center . str . show . RndredTrackLines $ reflect charPos' trackPiece]
-  where
-    trackPieceCap = conf ^. preferences . trackPieceCapacity . to fromIntegral
-    trackPiece = trackState ^. rows . to (take trackPieceCap)
+draw :: ReaderT Configuration IO (LocState -> [Widget ()])
+draw = do
+    trackPieceCap <- asks (^. preferences
+                           . trackPieceCapacity
+                           . to fromIntegral
+                          )
+    let f (LocState charPos' trackState (Just RacePage) _ _ _)
+            =
+            let trackPiece = trackState ^. rows . to (take trackPieceCap)
+            in
+                [ center . str
+                         . show
+                         . RndredTrackLines
+                         $ reflect charPos' trackPiece
+                ]
+        f (LocState _ _ (Just KBindsPage) kBinds' kBindsAdded' slctMenuItemIx')
+            = case side of
+                  Left'
+                      ->
+                      [ hCenter (str $ show KBindsPage)
+                        <=> center (kBindWid (StrafeCharacter Left')
+                                             True
+                                             kBindsAdded'
+                                    <=> kBindWid (StrafeCharacter Right')
+                                                 False
+                                                 False
+                                   )
+                      ]
+                  Right'
+                      ->
+                      [ hCenter (str $ show KBindsPage)
+                        <=> center (kBindWid (StrafeCharacter Left') False False
+                                    <=> kBindWid (StrafeCharacter Right')
+                                                 True
+                                                 kBindsAdded'
+                                   )
+                      ]
+          where
+            comSepSlctSigKBinds sig = do
+                unqSlctSigKBinds <- (map ppKey . List.nub . fst . (kBinds' !!))
+                                 <$> List.findIndex ((== sig) . snd) kBinds'
+                return . Text.unpack
+                       . Text.concat
+                       . (++ unqSlctSigKBinds ^? _last . to (: []) ^. non [])
+                       $ map (<> ", ") (unqSlctSigKBinds ^? _init ^. non [])
+            kBindWid sig True True = str
+                                   $ "* "
+                                   ++ show sig
+                                   ++ ": "
+                                   ++ fromJust (comSepSlctSigKBinds sig)
+                                   ++ if null . fromJust
+                                              $ comSepSlctSigKBinds sig
+                                      then "?"
+                                      else ", ?"
+            kBindWid sig True False = str
+                                    $ "* "
+                                    ++ show sig
+                                    ++ ": "
+                                    ++ fromJust (comSepSlctSigKBinds sig)
+                                    ++ "   "
+            kBindWid sig False _ = str
+                                 $ "  "
+                                 ++ show sig
+                                 ++ ": "
+                                 ++ fromJust (comSepSlctSigKBinds sig)
+                                 ++ "   "
+            StrafeCharacter side = toEnum slctMenuItemIx' :: Signal
+        f (LocState _ _ Nothing _ _ slctMenuItemIx')
+            =
+            case slctPage of
+                RacePage -> slctRacePage
+                KBindsPage -> slctKBindsPage
+          where
+            slctKBindsPage
+                =
+                [ hCenter (str "Main")
+                  <=> center (str ("  " ++ show RacePage)
+                              <=> str ("* " ++ show KBindsPage)
+                             )
+                ]
+            slctRacePage
+                =
+                [ hCenter (str "Main")
+                  <=> center (str ("* " ++ show RacePage)
+                              <=> str ("  " ++ show KBindsPage)
+                             )
+                ]
+            slctPage = toEnum slctMenuItemIx'
+    return f
 
 hndlEv :: IORef GlobState
        -> ReaderT Configuration
@@ -142,54 +258,160 @@ hndlEv globStateRef = do
                            . to fromIntegral
                           )
     let interpretFrom' = configureFrom opts
+        currTrack = tracks' Map.! currTrackName
+        initCharPos = runReader spawn opts
+        interpret'' = configure opts
     return $ \case
                  AppEvent FeedTrackRow -> do
                      charPos %= progress
                  AppEvent FeedTrackPiece -> do
                      track . rows %= drop (trackPieceCap - 1)
-                 VtyEvent (Vty.EvKey k []) -> do
-                     if | k == (Vty.KChar 'q') -> halt
-                        | k `elem` [Vty.KChar 'a', Vty.KLeft]
-                        -> charPos %= (`runReader` opts) . strafe Left'
-                        | k `elem` [Vty.KChar 'd', Vty.KRight]
-                        -> charPos %= (`runReader` opts) . strafe Right'
-                        | otherwise -> return ()
                  AppEvent FeedTrackCyc -> do
                      gen <- newStdGen
                      prevTrackState <- use track
-                     let currTrack = tracks' Map.! currTrackName
-                         currTrackCyc = getCycle currTrack
-                         initTrackState = prevTrackState & rows %~ (pure . head)
+                     let currTrackCyc = getCycle currTrack
+                         initTrackState = prevTrackState
+                                        & rows %~ (pure . head)
                          contTrackState = interpretFrom' initTrackState
                                                          currTrackCyc
                                                          gen
                      track .= contTrackState
                      track . rows %= reverse
-                     let currTrackCycPiecesCnt = contTrackState
-                                                 ^. rows
-                                                 . to length
-                                               `div` trackPieceCap
-                         currTrackCycRemRowsCnt = contTrackState
+                     let currTrackCycPiecesCnt' = contTrackState
                                                   ^. rows
                                                   . to length
-                                                `mod` trackPieceCap
-                                                + (currTrackCycPiecesCnt - 1)
+                                                `div` trackPieceCap
+                         currTrackCycRemRowsCnt' = contTrackState
+                                                   ^. rows
+                                                   . to length
+                                                 `mod` trackPieceCap
+                                                 + (currTrackCycPiecesCnt' - 1)
                      liftIO $ do
-                         writeIORef globStateRef
-                                    $ GlobState currTrackCycRemRowsCnt
-                                                currTrackCycPiecesCnt
+                         modifyIORef globStateRef
+                                     $ (& currTrackCycPiecesCnt
+                                        .~ currTrackCycPiecesCnt'
+                                       )
+                                       . (& currTrackCycRemRowsCnt
+                                          .~ currTrackCycRemRowsCnt'
+                                         )
                  AppEvent Fin -> do
-                     halt
+                     actPage .= Nothing
                  AppEvent ReturnChar -> do
                      charPos %= backtrack
+                 AppEvent Start -> do
+                     gen <- newStdGen
+                     let track' = interpret'' currTrack gen
+                     charPos .= initCharPos
+                     track .= track'
+                     track . rows %= reverse
+                 VtyEvent (Vty.EvKey k []) -> do
+                     if | k == (Vty.KChar 'q') -> do
+                            liftIO $ do
+                                GlobState {..} <- readIORef globStateRef
+                                maybe (return ()) killThread _flowThreadId
+                                maybe (return ()) killThread _sessThreadId
+                            halt
+                        | k == Vty.KBS -> do
+                            actPage' <- use actPage
+                            case actPage' of
+                                Just KBindsPage -> do
+                                    kBinds' <- use kBinds
+                                    slctMenuItemIx' <- use slctMenuItemIx
+                                    let sig = toEnum slctMenuItemIx' :: Signal
+                                        kBindIx = List.findIndex ((== sig) . snd)
+                                                                 kBinds'
+                                    case kBindIx of
+                                        Just kBindIx' -> do
+                                            kBinds . ix kBindIx' . _1 .= []
+                                        Nothing -> do
+                                            return ()
+                                Nothing -> do
+                                    kBinds .= defKBinds
+                                _ -> do
+                                    return ()
+
+                        | k == Vty.KEnter -> do
+                            actPage' <- use actPage
+                            case actPage' of
+                                Just KBindsPage -> do
+                                    kBindsAdded %= not
+                                Nothing -> do
+                                    slctPage' <- toEnum <$> use slctMenuItemIx
+                                    actPage .= Just slctPage'
+                                    when (slctPage' == RacePage) $ do
+                                        liftIO $ do
+                                            modifyIORef globStateRef
+                                                        $ (& paused .~ False)
+                                                          . (& started .~ False)
+                                    slctMenuItemIx .= 0
+                                _ -> do
+                                    return ()
+                        | k == Vty.KEsc -> do
+                            actPage' <- use actPage
+                            if actPage' == Nothing
+                            then do
+                                slctPage' <- toEnum <$> use slctMenuItemIx
+                                actPage .= Just slctPage'
+                            else do
+                                actPage .= Nothing
+                            slctPage' <- toEnum <$> use slctMenuItemIx
+                            when (slctPage' == RacePage) . liftIO $ do
+                                modifyIORef globStateRef (& paused .~ False)
+                        | k `elem` [Vty.KChar 'w', Vty.KUp] -> do
+                            slctPage' :: Page <- toEnum <$> use slctMenuItemIx
+                            when (slctPage' > minBound) $ slctMenuItemIx %= pred
+                        | k `elem` [Vty.KChar 's', Vty.KDown] -> do
+                            slctPage' :: Page <- toEnum <$> use slctMenuItemIx
+                            when (slctPage' < maxBound) $ slctMenuItemIx %= succ
+                        | otherwise -> do
+                            kBinds' <- use kBinds
+                            addKBinds' <- use kBindsAdded
+                            if addKBinds'
+                            then do
+                                pageItemIx' <- use slctMenuItemIx
+                                let sig = toEnum pageItemIx' :: Signal
+                                    kBindIx = List.findIndex ((== sig) . snd)
+                                                             kBinds'
+                                case kBindIx of
+                                    Just kBindIx' -> do
+                                        kBinds %= (^.. traversed
+                                                   . to (& _1 %~ filter (/= k))
+                                                  )
+                                        kBinds . ix kBindIx' . _1 %= (++ [k])
+                                    Nothing -> do
+                                        return ()
+                            else case List.findIndex (elem k . fst) kBinds' of
+                                Just sigIx -> do
+                                    let sig = snd $ kBinds' !! sigIx
+                                    case sig of
+                                        StrafeCharacter side -> do
+                                            GlobState {..} <- liftIO
+                                                            $ readIORef globStateRef
+                                            when (not _paused) $ do
+                                                charPos %= (`runReader` opts)
+                                                           . strafe side
+                                Nothing -> do
+                                    return ()
                  _ -> do
                      return ()
 
-initGlobState :: GlobState
-initGlobState = GlobState 0 0
+initGlobState ::  GlobState
+initGlobState = GlobState 0 0 Nothing Nothing True True
 
 initLocState :: State -> ReaderT Configuration IO LocState
 initLocState trackState = do
     opts <- asks _options
     let initCharPos = runReader spawn opts
-    return $ LocState initCharPos (trackState & rows %~ reverse)
+    return $ LocState initCharPos
+                      (trackState & rows %~ reverse)
+                      Nothing
+                      defKBinds
+                      False
+                      0
+
+defKBinds :: [([Vty.Key], Signal)]
+defKBinds
+   =
+   [ ([Vty.KChar 'a', Vty.KLeft], StrafeCharacter Left')
+   , ([Vty.KChar 'd', Vty.KRight], StrafeCharacter Right')
+   ]

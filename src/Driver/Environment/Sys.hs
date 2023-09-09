@@ -79,7 +79,7 @@ instance Environment Sys where
         execParser $ info (readConf fileConf <**> helper) fullDesc
     getSignals _ = do
         key <- getArrK
-        return $ if | key == Right 'q' -> Just Quit
+        return $ if | key == Right 'q' -> Nothing
                     | key `elem` [Left (Just LeftArrK), Right 'a']
                     -> Just (StrafeCharacter Left')
                     | key `elem` [Left (Just RightArrK), Right 'd']
