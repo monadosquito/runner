@@ -81,6 +81,7 @@ instance Driver Brick where
                                . trackPieceCapacity
                                . to fromIntegral
                               )
+        charProgS <- asks (^. options . characterProgressSpeed)
         (currTrackState, evChan, globStateRef) <- liftIO $ do
             gen <- newStdGen
             let currTrack = tracks' Map.! currTrackName
@@ -93,7 +94,7 @@ instance Driver Brick where
                 currTrackRemRowsCnt = currTrackRowsCnt
                                     `mod` trackPieceCap
                                     + (currTrackPiecesCnt - 1)
-                trackRowTime = round $ 1 / progressSpeed * 1000000
+                trackRowTime = round $ 1 / charProgS * 1000000
             evChan <- newBChan 10
             globStateRef <- newIORef initGlobState
             let feedTrackRow = do

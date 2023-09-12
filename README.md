@@ -128,6 +128,15 @@ options
         <th>Description</th>
     </tr>
     <tr>
+        <td>Character progress speed</td>
+        <td><code>2</code></td>
+        <td><code>--character-progress-speed</code> (<code>-w</code>)</td>
+        <td><code>characterProgressSpeed</code></td>
+        <td>
+            a number of track rows the character crosses per 1 second
+        </td>
+    </tr>
+    <tr>
         <td>Configuration file path</td>
         <td><code>"configuration.json"</code></td>
         <td><code>--configuration</code> (<code>-c</code>)</td>

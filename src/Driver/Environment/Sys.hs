@@ -63,6 +63,12 @@ instance Environment Sys where
                                                 <> short 'l'
                                                 <> value (_trackStartPartLength opts)
                                                )
+                                    <*> option auto
+                                               (long "character-progress-speed"
+                                                <> metavar "FLOATING_NUMBER"
+                                                <> short 's'
+                                                <> value (_characterProgressSpeed opts)
+                                               )
         argConf <- execParser
                  $ info (readConf defaultConfiguration <**> helper)
                         fullDesc
