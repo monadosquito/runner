@@ -1,4 +1,4 @@
-# Create tracks
+# Create Tracks
 
 - Define top-level bindings of tracks one of which is `defaultTrack` in the
   `Core.Script.Track.DefaultTrack` module by connecting the [`Core.Track.Track`
