@@ -5,7 +5,7 @@
 2. Select the `Start` item of the `Main` menu.
 3. Control the character using the [default character action key
    bindings](#table-4) or [custom ones](#custom-character-key-bindings) to
-   avoid [obstacles](#table-5).
+   avoid [obstacles](#table-5) and acquire a higher score.
 
 ## Notes
 
@@ -16,6 +16,7 @@
 ## Hints
 
 - A number after the `HP` label is remaining character hit points.
+- A number after the `SCORE` label is a current racing score.
 - To restart a racing,
     1. Return to the `Main` menu.
     2. Select the `Start` menu item.

@@ -2,6 +2,7 @@
 
 ## Added
 
+- Current racing scoring is added.
 - The character can be damaged.
 - Key bindings are saved.
 - Custom key bindings can be set.

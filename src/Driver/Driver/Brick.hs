@@ -44,6 +44,7 @@ import System.Directory
 import qualified Data.List as List
 import qualified Data.Map.NonEmpty as Map
 import qualified Data.Text as Text
+import Numeric.Natural
 
 
 data Page = RacePage | KBindsPage deriving (Bounded, Enum, Eq, Ord)
@@ -68,6 +69,7 @@ data LocState = LocState { _char :: Char.State
                          , _kBinds :: [(Signal, [Binding])]
                          , _kBindsAdded :: Bool
                          , _slctMenuItemIx :: Int
+                         , _score :: Natural
                          }
 
 
@@ -194,17 +196,26 @@ draw = do
                     _
                     _
                     _
+                    score'
           )
             =
             let trackPiece = trackState ^. Track.rows . to (take trackPieceCap)
             in
-                [ center $ hCenter (str . show
-                                        . RndredTrackLines
-                                        $ Char.reflect charState trackPiece
-                                   )
+                [ center $ hCenter (str $ "SCORE: " ++ show score')
+                           <=> hCenter (str . show
+                                            . RndredTrackLines
+                                            $ Char.reflect charState trackPiece
+                                       )
                            <=> hCenter (str $ "HP: " ++ show hp)
                 ]
-        f (LocState _ _ (Just KBindsPage) kBinds' kBindsAdded' slctMenuItemIx')
+        f (LocState _
+                    _
+                    (Just KBindsPage)
+                    kBinds'
+                    kBindsAdded'
+                    slctMenuItemIx'
+                    _
+          )
             = case sig' of
                   StrafeLeft
                       ->
@@ -250,7 +261,7 @@ draw = do
                                  ++ fromJust (comSepSlctSigKBinds sig)
                                  ++ "   "
             sig' = toEnum slctMenuItemIx' :: Signal
-        f (LocState _ _ Nothing _ _ slctMenuItemIx')
+        f (LocState _ _ Nothing _ _ slctMenuItemIx' _)
             =
             case slctPage of
                 RacePage -> slctRacePage
@@ -295,16 +306,21 @@ hndlEv globStateRef evChan = do
                      char %= Char.obstruct (progress prevCharPos)
                                            trackRows
                      charHP <- use (char . Char.hitPoints)
-                     aheadCharCell <- getCellAheadChar
+                     cellAheadChar <- getCellAheadChar
                      nextCharPos <- use (char . Char.position)
+                     let obstAheadChar = cellAheadChar
+                                         == Just Track.Obstacle
+                         charDead = charHP == 0
+                         charMoved = prevCharPos /= nextCharPos
+                     if (obstAheadChar && not charMoved)
+                     then liftIO $ do
+                         modifyIORef globStateRef
+                                     (& currTrackPieceCharHitsCnt
+                                      %~ (+ 1)
+                                     )
+                     else do
+                         score %= (+ 1)
                      liftIO $ do
-                         let obstAheadChar = aheadCharCell
-                                             == Just Track.Obstacle
-                             charDead = charHP == 0
-                             charMoved = prevCharPos /= nextCharPos
-                         when (obstAheadChar && not charMoved) $ do
-                             modifyIORef globStateRef
-                                         (& currTrackPieceCharHitsCnt %~ (+ 1))
                          modifyIORef globStateRef
                                      $ (& charStrafed .~ False)
                                        . (& charStuck .~ obstAheadChar)
@@ -359,6 +375,7 @@ hndlEv globStateRef evChan = do
                      track . Track.rows %= reverse
                      liftIO $ do
                          modifyIORef globStateRef (& charStuck .~ False)
+                     score .= 0
                  VtyEvent (Vty.EvKey k mods) -> do
                      if | k == (Vty.KChar 'q') -> do
                             kBinds' <- (& each
@@ -497,6 +514,7 @@ initLocState trackState kBinds' = do
                       Nothing
                       kBinds'
                       False
+                      0
                       0
 
 defKBinds :: [(Signal, [Binding])]
