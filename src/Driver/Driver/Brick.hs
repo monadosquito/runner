@@ -491,7 +491,8 @@ initLocState :: Track.State
 initLocState trackState kBinds' = do
     opts <- asks _options
     let initCharPos = runReader spawn opts
-    return $ LocState (Char.State hitPoints' initCharPos)
+    charHP <- asks (^. options . characterHitPoints)
+    return $ LocState (Char.State charHP initCharPos)
                       (trackState & Track.rows %~ reverse)
                       Nothing
                       kBinds'

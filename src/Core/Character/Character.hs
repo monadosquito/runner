@@ -46,6 +46,3 @@ spawn :: Reader Options Position
 spawn = do
     trackWidth' <- asks (^. trackWidth)
     return $ Position (0, trackWidth' `div` 2)
-
-hitPoints' :: Health
-hitPoints' = 3

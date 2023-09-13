@@ -69,6 +69,12 @@ instance Environment Sys where
                                                 <> short 's'
                                                 <> value (_characterProgressSpeed opts)
                                                )
+                                    <*> option auto
+                                               (long "character-hit-points"
+                                                <> metavar "NATURAL_NUMBER"
+                                                <> short 'p'
+                                                <> value (_characterHitPoints opts)
+                                               )
         argConf <- execParser
                  $ info (readConf defaultConfiguration <**> helper)
                         fullDesc

@@ -33,6 +33,7 @@ data Options = Options { _trackWidth :: TrackWidth
                        , _trackDifficultyLevel :: TrackDifficultyLevel
                        , _trackStartPartLength :: Natural
                        , _characterProgressSpeed :: Double
+                       , _characterHitPoints :: Natural
                        }
 
 
@@ -58,6 +59,7 @@ defaultOptions = Options { _trackWidth = 5
                                                  `div` 2
                          , _trackStartPartLength = 3
                          , _characterProgressSpeed = 2
+                         , _characterHitPoints = 3
                          }
 
 fix :: Options -> Options

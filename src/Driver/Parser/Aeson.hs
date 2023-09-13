@@ -35,6 +35,9 @@ instance Parser Aeson where
                            *> dfltNotSetOpt "characterProgressSpeed"
                                             (options . characterProgressSpeed)
                                             _Double
+                           *> dfltNotSetOpt "characterHitPoints"
+                                            (options . characterHitPoints)
+                                            _Integral
             dfltNotSetOpt optName optSetter optType
                 | Just optVal <- conf ^? key optName . optType
                 = optSetter .= optVal
