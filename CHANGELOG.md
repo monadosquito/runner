@@ -2,6 +2,7 @@
 
 ## Added
 
+- The character can be damaged.
 - Key bindings are saved.
 - Custom key bindings can be set.
 - Racings can be paused and restarted.

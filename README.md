@@ -4,10 +4,18 @@
    bindings](#table-3).
 2. Select the `Start` item of the `Main` menu.
 3. Control the character using the [default character action key
-   bindings](#table-4) or [custom ones](#custom-character-key-bindings).
+   bindings](#table-4) or [custom ones](#custom-character-key-bindings) to
+   avoid [obstacles](#table-5).
+
+## Notes
+
+- Character collisioning with objects causes [effects](#table-5).
+- Whenever the hit points are `0`, then a current racing progress is discarded
+  and the `Main` menu is opened.
 
 ## Hints
 
+- A number after the `HP` label is remaining character hit points.
 - To restart a racing,
     1. Return to the `Main` menu.
     2. Select the `Start` menu item.
@@ -208,3 +216,13 @@ character action key bindings
 |----------------|------------------------|
 |to strafe left  |the left key, the a key |
 |to strafe right |the right key, the d key|
+
+# Table 5
+
+objects
+
+|Object       |Symbols |Collision effect                             |
+|-------------|--------|---------------------------------------------|
+|a pass       |`,`, `.`|none                                         |
+|an obstacle  |`=`     |the character hit points are decreased by `1`|
+|the character|`x`     |none                                         |

@@ -15,9 +15,9 @@ module Driver.Driver.Brick where
 import Core.Character.Character
 import Core.Configuration.Configuration
 import Core.Port.Driver
-import Core.Track.Character.Character
+import qualified Core.Track.Character.Character as Char
 import Core.Track.Configuration.Configuration
-import Core.Track.Track
+import qualified Core.Track.Track as Track
 
 import Driver.Renderer.Cnsl
 
@@ -52,15 +52,18 @@ instance Show Page where
     show KBindsPage = "Key Bindings"
 
 data GlobState = GlobState { _currTrackCycPiecesCnt
-                           , _currTrackCycRemRowsCnt :: Int
+                           , _currTrackCycRemRowsCnt
+                           , _currTrackPieceCharHitsCnt :: Int
                            , _flowThreadId
                            , _sessThreadId :: Maybe ThreadId
                            , _paused
-                           , _started :: Bool
+                           , _started
+                           , _charStrafed
+                           , _charStuck :: Bool
                            }
 
-data LocState = LocState { _charPos :: Position
-                         , _track :: State
+data LocState = LocState { _char :: Char.State
+                         , _track :: Track.State
                          , _actPage :: Maybe Page
                          , _kBinds :: [(Signal, [Binding])]
                          , _kBindsAdded :: Bool
@@ -85,11 +88,11 @@ instance Driver Brick where
         (currTrackState, evChan, globStateRef) <- liftIO $ do
             gen <- newStdGen
             let currTrack = tracks' Map.! currTrackName
-                currTrackCyc = getCycle currTrack
+                currTrackCyc = Track.getCycle currTrack
                 currTrackInf = is _Free currTrackCyc
                 interpret'' = configure opts
                 currTrackState = interpret'' currTrack gen
-                currTrackRowsCnt = currTrackState ^. rows . to length
+                currTrackRowsCnt = currTrackState ^. Track.rows . to length
                 currTrackPiecesCnt = currTrackRowsCnt `div` trackPieceCap
                 currTrackRemRowsCnt = currTrackRowsCnt
                                     `mod` trackPieceCap
@@ -100,25 +103,42 @@ instance Driver Brick where
             let feedTrackRow = do
                     GlobState {..} <- readIORef globStateRef
                     threadDelay trackRowTime
-                    if not _paused
+                    let freezed = _paused || _charStuck
+                    if not freezed
                     then writeBChan evChan FeedTrackRow
                     else feedTrackRow
+                feedHitTrackRows = do
+                    GlobState {..} <- readIORef globStateRef
+                    when (_currTrackPieceCharHitsCnt > 0) $ do
+                        modifyIORef globStateRef
+                                    (& currTrackPieceCharHitsCnt .~ 0)
+                        replicateM_ _currTrackPieceCharHitsCnt feedTrackRow
+                        feedHitTrackRows
+                feedTrackRows initTrackRowsCnt = do
+                    modifyIORef globStateRef
+                                (& currTrackPieceCharHitsCnt
+                                 .~ initTrackRowsCnt
+                                )
+                    feedHitTrackRows
                 start = do
                     replicateM_ currTrackPiecesCnt $ do
-                        replicateM_ trackPieceCap feedTrackRow
+                        feedTrackRows trackPieceCap
                         writeBChan evChan FeedTrackPiece
                         writeBChan evChan ReturnChar
-                    replicateM_ currTrackRemRowsCnt feedTrackRow
+                    feedTrackRows currTrackRemRowsCnt
+                    threadDelay 100000
                     if currTrackInf
                     then forever $ do
                         writeBChan evChan FeedTrackCyc
                         writeBChan evChan ReturnChar
+                        threadDelay 100000
                         GlobState {..} <- readIORef globStateRef
                         replicateM_ _currTrackCycPiecesCnt $ do
-                            replicateM_ trackPieceCap feedTrackRow
+                            feedTrackRows trackPieceCap
                             writeBChan evChan FeedTrackPiece
                             writeBChan evChan ReturnChar
-                        replicateM_ _currTrackCycRemRowsCnt feedTrackRow
+                        feedTrackRows _currTrackCycRemRowsCnt
+                        threadDelay 100000
                     else do
                         modifyIORef globStateRef (& paused .~ True)
                         writeBChan evChan Fin
@@ -133,7 +153,7 @@ instance Driver Brick where
                                   . (& sessThreadId .~ Just sessThreadId')
             modifyIORef globStateRef (& flowThreadId .~ Just flowThreadId')
             return (currTrackState, evChan, globStateRef)
-        app' <- app globStateRef
+        app' <- app globStateRef evChan
         kBinds' <- liftIO getKBinds
         initLocState' <- initLocState currTrackState kBinds'
         liftIO $ do
@@ -149,10 +169,12 @@ data FlowEvent = FeedTrackRow
                | Start
 
 
-app :: IORef GlobState -> ReaderT Configuration IO (App LocState FlowEvent ())
-app globStateRef = do
+app :: IORef GlobState
+    -> BChan FlowEvent
+    -> ReaderT Configuration IO (App LocState FlowEvent ())
+app globStateRef evChan = do
     draw' <- draw
-    hndlEv' <- hndlEv globStateRef
+    hndlEv' <- hndlEv globStateRef evChan
     return $ App { appDraw = draw'
                  , appChooseCursor = neverShowCursor
                  , appHandleEvent = hndlEv'
@@ -166,14 +188,21 @@ draw = do
                            . trackPieceCapacity
                            . to fromIntegral
                           )
-    let f (LocState charPos' trackState (Just RacePage) _ _ _)
+    let f (LocState charState@(Char.State hp _)
+                    trackState
+                    (Just RacePage)
+                    _
+                    _
+                    _
+          )
             =
-            let trackPiece = trackState ^. rows . to (take trackPieceCap)
+            let trackPiece = trackState ^. Track.rows . to (take trackPieceCap)
             in
-                [ center . str
-                         . show
-                         . RndredTrackLines
-                         $ reflect charPos' trackPiece
+                [ center $ hCenter (str . show
+                                        . RndredTrackLines
+                                        $ Char.reflect charState trackPiece
+                                   )
+                           <=> hCenter (str $ "HP: " ++ show hp)
                 ]
         f (LocState _ _ (Just KBindsPage) kBinds' kBindsAdded' slctMenuItemIx')
             = case sig' of
@@ -245,10 +274,11 @@ draw = do
     return f
 
 hndlEv :: IORef GlobState
+       -> BChan FlowEvent
        -> ReaderT Configuration
                   IO
                   (BrickEvent () FlowEvent -> EventM () LocState ())
-hndlEv globStateRef = do
+hndlEv globStateRef evChan = do
     currTrackName <- asks (^. preferences . trackName)
     opts <- asks _options
     trackPieceCap <- asks (^. preferences
@@ -257,33 +287,57 @@ hndlEv globStateRef = do
                           )
     let interpretFrom' = configureFrom opts
         currTrack = tracks' Map.! currTrackName
-        initCharPos = runReader spawn opts
         interpret'' = configure opts
     return $ \case
                  AppEvent FeedTrackRow -> do
-                     charPos %= progress
+                     prevCharPos <- use (char . Char.position)
+                     trackRows <- use (track . Track.rows)
+                     char %= Char.obstruct (progress prevCharPos)
+                                           trackRows
+                     charHP <- use (char . Char.hitPoints)
+                     aheadCharCell <- getCellAheadChar
+                     nextCharPos <- use (char . Char.position)
+                     liftIO $ do
+                         let obstAheadChar = aheadCharCell
+                                             == Just Track.Obstacle
+                             charDead = charHP == 0
+                             charMoved = prevCharPos /= nextCharPos
+                         when (obstAheadChar && not charMoved) $ do
+                             modifyIORef globStateRef
+                                         (& currTrackPieceCharHitsCnt %~ (+ 1))
+                         modifyIORef globStateRef
+                                     $ (& charStrafed .~ False)
+                                       . (& charStuck .~ obstAheadChar)
+                         when charDead $ do
+                             writeBChan evChan Fin
+                             writeBChan evChan Start
                  AppEvent FeedTrackPiece -> do
-                     track . rows %= drop (trackPieceCap - 1)
+                     track . Track.rows %= drop (trackPieceCap - 1)
+                     liftIO $ do
+                         modifyIORef globStateRef
+                                     (& currTrackPieceCharHitsCnt .~ 0)
                  AppEvent FeedTrackCyc -> do
                      gen <- newStdGen
                      prevTrackState <- use track
-                     let currTrackCyc = getCycle currTrack
+                     let currTrackCyc = Track.getCycle currTrack
                          initTrackState = prevTrackState
-                                        & rows %~ (pure . head)
+                                        & Track.rows %~ (pure . head)
                          contTrackState = interpretFrom' initTrackState
                                                          currTrackCyc
                                                          gen
-                     track .= contTrackState
-                     track . rows %= reverse
-                     let currTrackCycPiecesCnt' = contTrackState
-                                                  ^. rows
-                                                  . to length
+                         currTrackCycRowsCnt = contTrackState
+                                             ^. Track.rows
+                                             . to length
+                         currTrackCycPiecesCnt' = currTrackCycRowsCnt
                                                 `div` trackPieceCap
-                         currTrackCycRemRowsCnt' = contTrackState
-                                                   ^. rows
-                                                   . to length
+                         currTrackCycRemRowsCnt' = currTrackCycRowsCnt
                                                  `mod` trackPieceCap
-                                                 + (currTrackCycPiecesCnt' - 1)
+                                                 + (currTrackCycPiecesCnt'
+                                                    - 1
+                                                   )
+                     track .= contTrackState
+                     track . Track.rows %= reverse
+                     salvageChar
                      liftIO $ do
                          modifyIORef globStateRef
                                      $ (& currTrackCycPiecesCnt
@@ -292,18 +346,20 @@ hndlEv globStateRef = do
                                        . (& currTrackCycRemRowsCnt
                                           .~ currTrackCycRemRowsCnt'
                                          )
+                                       . (charStuck .~ False)
                  AppEvent Fin -> do
                      actPage .= Nothing
                  AppEvent ReturnChar -> do
-                     charPos %= backtrack
+                     char . Char.position %= backtrack
                  AppEvent Start -> do
                      gen <- newStdGen
-                     let track' = interpret'' currTrack gen
-                     charPos .= initCharPos
-                     track .= track'
-                     track . rows %= reverse
+                     let trackState = interpret'' currTrack gen
+                     char .= runReader Char.revive opts
+                     track .= trackState
+                     track . Track.rows %= reverse
+                     liftIO $ do
+                         modifyIORef globStateRef (& charStuck .~ False)
                  VtyEvent (Vty.EvKey k mods) -> do
-                     let kBind = binding k mods
                      if | k == (Vty.KChar 'q') -> do
                             kBinds' <- (& each
                                         . _2
@@ -336,7 +392,6 @@ hndlEv globStateRef = do
                                     kBinds .= defKBinds
                                 _ -> do
                                     return ()
-
                         | k == Vty.KEnter -> do
                             actPage' <- use actPage
                             case actPage' of
@@ -371,6 +426,7 @@ hndlEv globStateRef = do
                             slctPage' :: Page <- toEnum <$> use slctMenuItemIx
                             when (slctPage' < maxBound) $ slctMenuItemIx %= succ
                         | otherwise -> do
+                            let kBind = binding k mods
                             kBinds' <- use kBinds
                             addKBinds' <- use kBindsAdded
                             if addKBinds'
@@ -397,24 +453,46 @@ hndlEv globStateRef = do
                                     GlobState {..} <- liftIO
                                                     $ readIORef globStateRef
                                     when (not _paused) $ do
-                                        charPos %= (`runReader` opts)
-                                                   . strafe (signalToSide sig)
+                                        trackRows <- use (track . Track.rows)
+                                        nextCharPos <- (`runReader` opts)
+                                                       . strafe (signalToSide sig)
+                                                    <$> use (char
+                                                             . Char.position
+                                                            )
+                                        char %= Char.obstruct nextCharPos
+                                                              trackRows
+                                        cellAheadChar <- getCellAheadChar
+                                        charHP <- use (char . Char.hitPoints)
+                                        liftIO $ do
+                                            let charDead = charHP == 0
+                                                obstAheadChar = cellAheadChar
+                                                                == Just Track.Obstacle
+                                            modifyIORef globStateRef
+                                                        $ (& charStrafed
+                                                           .~ True
+                                                          )
+                                                          . (& charStuck
+                                                             .~ obstAheadChar
+                                                            )
+                                            when charDead $ do
+                                                writeBChan evChan Fin
+                                                writeBChan evChan Start
                                 Nothing -> do
                                     return ()
                  _ -> do
                      return ()
 
-initGlobState ::  GlobState
-initGlobState = GlobState 0 0 Nothing Nothing True True
+initGlobState :: GlobState
+initGlobState = GlobState 0 0 0 Nothing Nothing True True False False
 
-initLocState :: State
+initLocState :: Track.State
              -> [(Signal, [Binding])]
              -> ReaderT Configuration IO LocState
 initLocState trackState kBinds' = do
     opts <- asks _options
     let initCharPos = runReader spawn opts
-    return $ LocState initCharPos
-                      (trackState & rows %~ reverse)
+    return $ LocState (Char.State hitPoints' initCharPos)
+                      (trackState & Track.rows %~ reverse)
                       Nothing
                       kBinds'
                       False
@@ -451,3 +529,26 @@ getKBinds = do
 
 kBindsSavFileName :: String
 kBindsSavFileName = ".k-binds.sav"
+
+getCellAheadChar :: EventM () LocState (Maybe Track.Cell)
+getCellAheadChar = do
+    charPos <- use (char . Char.position)
+    let charRowIx = charPos ^. unPosition . _1 . to fromIntegral
+        charColIx = charPos ^. unPosition . _2 . to fromIntegral
+    gets (^? track . Track.rows . ix (charRowIx + 1) . ix charColIx)
+
+salvageChar :: EventM () LocState ()
+salvageChar = do
+    row <- use (track . Track.rows . _head)
+    charColIx <- fromIntegral <$> use (char . Char.position . unPosition . _2)
+    let passCellIxs = List.findIndices (== Track.TrailPart) row
+        nearestPassCellIx = foldr (\passCellIx nearestPassCellIx'
+                                   ->
+                                   if abs (passCellIx - charColIx)
+                                      < nearestPassCellIx'
+                                   then passCellIx
+                                   else nearestPassCellIx'
+                                  )
+                                  charColIx
+                                  passCellIxs
+    char . Char.position . unPosition . _2 .= fromIntegral nearestPassCellIx

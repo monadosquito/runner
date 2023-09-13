@@ -1,5 +1,6 @@
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE FlexibleInstances #-}
 
 
 module Core.Character.Character where
@@ -10,9 +11,13 @@ import Core.Track.Track
 
 import Control.Lens
 import Control.Monad.Reader
+import Numeric.Natural
 
 
-newtype Position = Position (RowIndex, ColumnIndex)
+type Health = Natural
+
+
+newtype Position = Position {_unPosition :: (RowIndex, ColumnIndex)} deriving Eq
 
 
 data Side = Left' | Right' deriving Eq
@@ -41,3 +46,6 @@ spawn :: Reader Options Position
 spawn = do
     trackWidth' <- asks (^. trackWidth)
     return $ Position (0, trackWidth' `div` 2)
+
+hitPoints' :: Health
+hitPoints' = 3
