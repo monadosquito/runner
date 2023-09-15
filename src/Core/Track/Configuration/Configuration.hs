@@ -13,16 +13,23 @@ import System.Random
 import qualified Core.Configuration.Configuration as Configuration
 
 
-configure :: Configuration.Options -> StdGen -> Track -> GenerationState
-configure options' generator' track = runReader initialise
-                                    $ Configuration.fix options'
+configure :: Options -> Track -> StdGen -> State
+configure options' track' generator'
+    =
+    _track . runReader initialise $ Configuration.fix options'
   where
     initialise = do
-         initialGenerationState <- initialiseGenerationState generator'
-         State.execStateT (interpret' track) initialGenerationState
+        initialState <- initialiseState
+        let initialGenerationState = initialiseGenerationState generator'
+                                                               initialState
+        State.execStateT (interpret' track') initialGenerationState
 
-configureFrom :: Options -> GenerationState -> Track -> GenerationState
-configureFrom options' generationState track = runReader initialise
-                                             $ Configuration.fix options'
-  where
-    initialise = State.execStateT (interpret' track) generationState
+configureFrom :: Options -> State -> Track -> StdGen -> State
+configureFrom options'
+    =
+    \state track' generator'
+    ->
+    let initialise = State.execStateT (interpret' track') initialGenerationState
+        initialGenerationState = initialiseGenerationState generator' state
+    in
+        _track . runReader initialise $ Configuration.fix options'

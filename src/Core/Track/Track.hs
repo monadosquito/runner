@@ -11,7 +11,7 @@ module Core.Track.Track where
 
 import Control.Lens
 import Control.Monad.Free
-import Control.Monad.State
+import qualified Control.Monad.State as State
 import Data.List
 import Numeric.Natural
 import System.Random
@@ -55,15 +55,14 @@ newtype Offset = Offset (ColumnIndex, ColumnIndex)
 
 data Cell = Obstacle | TrailPart | Pass deriving Eq
 
-data GenerationState = GenerationState { _rows :: [[Cell]]
-                                       , _generator :: StdGen
-                                       , _difficulty :: Difficulty
+data GenerationState = GenerationState { _generator :: StdGen
                                        , _eitherSequences :: [Track]
                                        , _probabilities :: [Probability]
                                        , _cycle' :: Track
                                        , _repeatedSequences :: [(Count, Track)]
                                        , _markedSequence :: Maybe MarkedSequence
                                        , _sequenceEndsCount :: Count
+                                       , _track :: State
                                        }
 
 data Track' next = Condition { _condition :: Condition
@@ -106,22 +105,26 @@ data Part = StaticLengthFinitePart PartLength
 
 data MarkedSequence = EitherSequence | RepeatedSequence Count
 
+data State = State { _difficulty :: Difficulty
+                   , _rows :: [[Cell]]
+                   }
+
 
 makeFieldsNoPrefix ''GenerationState
 makeFieldsNoPrefix ''Boundaries
 makeFieldsNoPrefix ''Difficulty
+makeFieldsNoPrefix ''State
 
 
-generateRow :: StateT GenerationState (Reader Options) ()
+generateRow :: State.StateT GenerationState (Reader Options) ()
 generateRow = do
     trailPartColumnIndices <- selectNextTrailPartColumns
     row <- trail trailPartColumnIndices
         <$> (scatter Pass =<< lift generateObstacleRow)
     forM_ trailPartColumnIndices $ \index' ->
-        rows . _head
-             . element (fromIntegral index')
-             .= TrailPart
-    rows %= (row :)
+        track . rows . _head . element (fromIntegral index')
+              .= TrailPart
+    track . rows %= (row :)
 
 generateObstacleRow :: Reader Options [Cell]
 generateObstacleRow = do
@@ -143,16 +146,18 @@ getShiftBoundaries position = do
              then Boundaries (position - 1, position)
              else Boundaries (position - 1, position + 1)
 
-interpret :: StdGen -> Track -> GenerationState
-interpret generator' track = runReader initialise defaultOptions
+interpret :: Track -> StdGen -> State
+interpret track' generator' = _track $ runReader initialise defaultOptions
   where
     initialise = do
-         initialGenerationState <- initialiseGenerationState generator'
-         execStateT (interpret' track) initialGenerationState
+         initialState <- initialiseState
+         let initialGenerationState = initialiseGenerationState generator'
+                                                                initialState
+         State.execStateT (interpret' track') initialGenerationState
 
-interpret' :: Track -> StateT GenerationState (Reader Options) ()
+interpret' :: Track -> State.StateT GenerationState (Reader Options) ()
 interpret' (Pure _) = pure ()
-interpret' (Free (SequenceEnd track)) = do
+interpret' (Free (SequenceEnd track')) = do
     markedSequence' <- use markedSequence
     case markedSequence' of
         Just EitherSequence -> do
@@ -217,28 +222,29 @@ interpret' (Free (SequenceEnd track)) = do
                                 repeatedSequences'
                 interpret' repeatedSequence
         Nothing -> return ()
-    interpret' track
-interpret' (Free (Sequence EitherSequenceWhere track)) = do
+    interpret' track'
+interpret' (Free (Sequence EitherSequenceWhere track')) = do
     eitherSequences %= (Pure () :)
     markedSequence .= Just EitherSequence
-    interpret' track
-interpret' (Free (Condition (WithProbability probability') track)) = do
+    interpret' track'
+interpret' (Free (Condition (WithProbability probability') track')) = do
     probabilities %= (probability' :)
-    interpret' track
-interpret' (Free (Sequence (RepeatedSequenceWhere count) track)) = do
+    interpret' track'
+interpret' (Free (Sequence (RepeatedSequenceWhere count) track')) = do
     markedSequence .= Just (RepeatedSequence count)
     repeatedSequences %= ((count, Pure ()) :)
-    interpret' track
-interpret' (Free track) = do
+    interpret' track'
+interpret' (Free track') = do
     markedSequence' <- use markedSequence
     case markedSequence' of
         Nothing -> do
-            case track of
+            case track' of
                 Part (StaticLengthFinitePart length') _ -> do
-                    difficultyLevelSlope' <- use $ difficulty . levelSlope
+                    difficultyLevelSlope' <- use
+                                           $ track . difficulty . levelSlope
                     case difficultyLevelSlope' of
                         GradualSlope rise run -> do
-                            difficulty . levelSlope .= SteepSlope
+                            track . difficulty . levelSlope .= SteepSlope
                             let piecesCount = fromIntegral $ length' `div` run
                             interpret' . replicateM_ piecesCount $ do
                                 withAlteredDifficultyLevel rise
@@ -248,11 +254,12 @@ interpret' (Free track) = do
                             replicateM_ (fromIntegral length') generateRow
                 Condition (WithDifficultyLevel level') _ -> do
                     maximumDifficultyLevel <- asks _trackWidth
-                    difficulty . level .= if level' <= maximumDifficultyLevel
-                                          then level'
-                                          else maximumDifficultyLevel
+                    track . difficulty . level
+                          .= if level' <= maximumDifficultyLevel
+                             then level'
+                             else maximumDifficultyLevel
                 Condition (WithAlteredDifficultyLevel difference) _ -> do
-                    oldDifficultyLevel <- use $ difficulty . level
+                    oldDifficultyLevel <- use $ track . difficulty . level
                     let newDifficultyLevel = fromIntegral oldDifficultyLevel
                                            + difference
                     maximumDifficultyLevel <- fromIntegral <$> asks _trackWidth
@@ -280,17 +287,17 @@ interpret' (Free track) = do
                                     | otherwise -> difference
                 Condition (WithGradualDifficultyLevelSlope rise run) _
                     ->
-                    difficulty . levelSlope .= GradualSlope rise run
+                    track . difficulty . levelSlope .= GradualSlope rise run
                 Condition WithSteepDifficultyLevelSlope _
                     ->
-                    difficulty . levelSlope .= SteepSlope
+                    track . difficulty . levelSlope .= SteepSlope
                 Condition (WithGradualDifficultyLevelAmountRiseSlope rise run) _
                     -> do
                     maximumDifficultyLevel <- asks _trackWidth
                     let rise' = round
                               $ fromIntegral maximumDifficultyLevel * rise
                     interpret' $ withGradualDifficultyLevelSlope rise' run
-                Sequence InfiniteTailWhere _ -> cycle' .= Free track
+                Sequence InfiniteTailWhere _ -> cycle' .= Free track'
                 Part (MiddlePredefinedPart cell body) _ -> do
                     width <- fromIntegral <$> asks _trackWidth
                     when (rectangular body && length (head body) <= width)
@@ -305,7 +312,7 @@ interpret' (Free track) = do
                                                                )
                                                        )
                                                        body
-                        rows %= (offsettedBody ++)
+                        track . rows %= (offsettedBody ++)
                 Part (LeftPredefinedPart cell body) _ -> do
                     width <- fromIntegral <$> asks _trackWidth
                     when (rectangular body && length (head body) <= width) $ do
@@ -317,7 +324,7 @@ interpret' (Free track) = do
                                                                     )
                                                             )
                                                             body
-                        rows %= (rightOffsettedBody ++)
+                        track . rows %= (rightOffsettedBody ++)
                 Part (RightPredefinedPart cell body) _ -> do
                     width <- fromIntegral <$> asks _trackWidth
                     when (rectangular body && length (head body) <= width)
@@ -330,7 +337,7 @@ interpret' (Free track) = do
                                                                    )
                                                            )
                                                            body
-                        rows %= (leftOffsettedBody ++)
+                        track . rows %= (leftOffsettedBody ++)
                 Part (DynamicLengthFinitePart (Range range)) _ -> do
                     previousGenerator <- use generator
                     let range' = range & each %~ fromIntegral @Natural @Int
@@ -339,19 +346,19 @@ interpret' (Free track) = do
                     generator .= nextGenerator
                     interpret' . staticLengthFinitePart $ fromIntegral length'
         Just EitherSequence -> do
-            eitherSequences . _head %= (*> Free (Pure () <$ track))
+            eitherSequences . _head %= (*> Free (Pure () <$ track'))
         Just (RepeatedSequence _) -> do
             lastIndex <- fromIntegral <$> use sequenceEndsCount
             repeatedSequences . ix lastIndex
                               . _2
-                              %= (*> Free (Pure () <$ track))
-    interpret' $ _next track
+                              %= (*> Free (Pure () <$ track'))
+    interpret' $ _next track'
 
-selectNextTrailPartColumns :: StateT GenerationState (Reader Options)
-                                                     [ColumnIndex]
+selectNextTrailPartColumns :: State.StateT GenerationState (Reader Options)
+                                                           [ColumnIndex]
 selectNextTrailPartColumns = do
     previouses <- ((fromIntegral <$>) . findIndices (== TrailPart))
-               <$> use (rows . _head)
+               <$> use (track . rows . _head)
     difficultyLevel' <- asks _trackDifficultyLevel
     previousGenerator <- use generator
     width <- asks _trackWidth
@@ -390,23 +397,14 @@ staticLengthFinitePart length'
     =
     Free (Part (StaticLengthFinitePart length') (Pure ()))
 
-initialiseGenerationState :: StdGen -> Reader Options GenerationState
-initialiseGenerationState generator' = do
-    startRow <- generateStartRow
-    startPartLength' <- fromIntegral <$> asks _trackStartPartLength
-    let startPart = replicate startPartLength' startRow
-    difficultyLevel' <- asks _trackDifficultyLevel
-    return $ GenerationState startPart
-                             generator'
-                             (Difficulty difficultyLevel' SteepSlope)
-                             []
-                             []
-                             (Pure ())
-                             []
-                             Nothing
-                             0
+initialiseGenerationState :: StdGen -> State -> GenerationState
+initialiseGenerationState generator' state
+    =
+    GenerationState generator' [] [] (Pure ()) [] Nothing 0 state
 
-generatePassPosition :: StateT GenerationState (Reader Options) ColumnIndex
+generatePassPosition :: State.StateT GenerationState
+                                     (Reader Options)
+                                     ColumnIndex
 generatePassPosition = do
     previousGenerator <- use generator
     width <- asks _trackWidth
@@ -415,9 +413,11 @@ generatePassPosition = do
     generator .= nextGenerator
     return $ fromIntegral position
 
-scatter :: Cell -> [Cell] -> StateT GenerationState (Reader Options) [Cell]
+scatter :: Cell
+        -> [Cell]
+        -> State.StateT GenerationState (Reader Options) [Cell]
 scatter cell row = do
-    difficultyLevel' <- use $ difficulty . level
+    difficultyLevel' <- use $ track . difficulty . level
     width <- asks _trackWidth
     passPositions <- replicateM (fromIntegral $ width - difficultyLevel')
                                 generatePassPosition
@@ -486,10 +486,13 @@ withGradualDifficultyLevelAmountRiseSlope rise run
 infiniteTailWhere :: Track
 infiniteTailWhere = Free (Sequence InfiniteTailWhere (Pure ()))
 
-interpretFrom :: GenerationState -> Track -> GenerationState
-interpretFrom generationState track = runReader initialise defaultOptions
+interpretFrom :: State -> Track -> StdGen -> State
+interpretFrom state track' generator'
+    =
+    _track $ runReader initialise defaultOptions
   where
-    initialise = execStateT (interpret' track) generationState
+    initialise = State.execStateT (interpret' track') initialGenerationState'
+    initialGenerationState' = initialiseGenerationState generator' state
 
 middlePredefinedPart :: Cell -> PartBody -> Track
 middlePredefinedPart cell body
@@ -528,8 +531,23 @@ dynamicLengthFinitePart range
     Free (Part (DynamicLengthFinitePart (Range range)) (Pure ()))
 
 trail :: [ColumnIndex] -> [Cell] -> [Cell]
-trail = flip (foldr (\index' row
-                      ->
-                      row & element (fromIntegral index') .~ TrailPart
-                     )
-             )
+trail = flip
+      $ foldr (\index' row -> row & element (fromIntegral index') .~ TrailPart)
+
+initialiseState :: Reader Options State
+initialiseState = do
+    startRow <- generateStartRow
+    startPartLength' <- fromIntegral <$> asks _trackStartPartLength
+    let startPart = replicate startPartLength' startRow
+    difficultyLevel' <- asks _trackDifficultyLevel
+    return $ State (Difficulty difficultyLevel' SteepSlope) startPart
+
+getCycle :: Track -> Track
+getCycle track' = _cycle' $ runReader initialise defaultOptions
+  where
+    initialise = do
+         initialState <- initialiseState
+         let initialGenerationState = initialiseGenerationState generator'
+                                                                initialState
+         State.execStateT (interpret' track') initialGenerationState
+    generator' = mkStdGen 0

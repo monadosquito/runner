@@ -39,11 +39,12 @@ data FlowInput = FlowInput { trackCells :: [[Cell]]
                            , trackCycleLen
                            , trackCyclePiecesCnt :: Int
                            , trackRem :: [[Cell]]
-                           , interpretFrom' :: GenerationState
+                           , interpretFrom' :: State
                                             -> Track
-                                            -> GenerationState
-                           , trackGenState :: GenerationState
-                           , trackGenStateRef :: IORef GenerationState
+                                            -> StdGen
+                                            -> State
+                           , trackGenState :: State
+                           , trackGenStateRef :: IORef State
                            }
 
 
@@ -51,6 +52,8 @@ main :: IO ()
 main = do
     gen <- newStdGen
     conf <- getConfiguration (Proxy @Sys) $ Proxy @Aeson
+    let track' = tracks' Map.! _trackName (_preferences conf)
+        trackInfTail = getCycle track'
     run gen conf $ \FlowInput {..} -> do
         forM_ [0..trackPiecesCnt - 1] $ \ix' -> do
             rndrTrackPiece ix' trackPieceCap trackCells
@@ -61,15 +64,17 @@ main = do
                 trackCycle' <- genTrackCycle interpretFrom'
                                              trackGenState
                                              trackGenStateRef
+                                             trackInfTail
                 rndrTrackPiece ix' trackPieceCap trackCycle'
                 threadDelay 1000000
             render (Proxy @Cnsl) trackRem
   where
     run gen conf flow = do
-        let track = tracks' Map.! _trackName (_preferences conf)
+        let track' = tracks' Map.! _trackName (_preferences conf)
             trackCells = rvsTrackCells
             interpret'' = configure $ _options conf
-            trackPiecesCnt = length (_rows trackGenState) `div` trackPieceCap
+            trackPiecesCnt = length (trackGenState ^. rows)
+                           `div` trackPieceCap
             trackRem = drop (trackPieceCap * trackPiecesCnt) rvsTrackCells
             trackPieceCap = conf
                           ^. preferences
@@ -77,11 +82,11 @@ main = do
                           . to fromIntegral
             interpretFrom' = configureFrom $ _options conf
             rvsTrackCells = trackGenState ^. rows . reversed
-            trackGenState = interpret'' gen track
-        let trackCycleLen = trackGenState
-                          ^? cycle'
-                          . _Free
-                          . to (interpret gen . Free)
+            trackGenState = interpret'' track' gen
+            trackInfTail = getCycle track'
+            trackCycleLen = trackInfTail
+                          ^? _Free
+                          . to ((`interpret''` gen) . Free)
                           . rows
                           . to length
                           ^. non 0
@@ -91,12 +96,13 @@ main = do
     rndrTrackPiece ix' cap rows' = do
         let trackPiece = take cap $ drop (ix' * cap) rows'
         render (Proxy @Cnsl) trackPiece
-    genTrackCycle interpretFrom' trackGenState trackGenStateRef = do
+    genTrackCycle interpretFrom' trackGenState trackGenStateRef trackInfTail = do
         gen' <- newStdGen
-        trackStartLine <- (^. rows . _head) <$> readIORef trackGenStateRef
+        trackStartLine <- (^. rows . _head)
+                       <$> readIORef trackGenStateRef
         let contTrackGenState = trackGenState & rows .~ pure trackStartLine
-                                              & generator .~ gen'
             newTrackGenState = interpretFrom' contTrackGenState
-                                              $ _cycle' trackGenState
+                                              trackInfTail
+                                              gen'
         writeIORef trackGenStateRef newTrackGenState
         return $ newTrackGenState ^. rows . _tail . reversed
