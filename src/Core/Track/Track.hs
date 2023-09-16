@@ -115,6 +115,7 @@ data MarkedSequence = EitherSequence | RepeatedSequence Count
 
 data State = State { _difficulty :: Difficulty
                    , _rows :: [[Cell]]
+                   , _name :: String
                    }
 
 
@@ -124,7 +125,7 @@ makeFieldsNoPrefix ''Difficulty
 makeFieldsNoPrefix ''State
 
 
-generateRow :: State.StateT GenerationState (Reader Options) ()
+generateRow :: State.StateT GenerationState (Reader Configuration) ()
 generateRow = do
     trailPartColumnIndices <- selectNextTrailPartColumns
     row <- trail trailPartColumnIndices
@@ -134,28 +135,28 @@ generateRow = do
               .= TrailPart
     track . rows %= (row :)
 
-generateObstacleRow :: Reader Options [Cell]
+generateObstacleRow :: Reader Configuration [Cell]
 generateObstacleRow = do
-    width <- asks _trackWidth
+    width <- asks (^. options . trackWidth)
     return $ replicate (fromIntegral width) Obstacle
 
-generateStartRow :: Reader Options [Cell]
+generateStartRow :: Reader Configuration [Cell]
 generateStartRow = do
-    width <- asks _trackWidth
+    width <- asks (^. options . trackWidth)
     return $ replicate (fromIntegral width) Obstacle
            & element (fromIntegral $ width `div` 2)
            .~ TrailPart
 
-getShiftBoundaries :: ColumnIndex -> Reader Options Boundaries
+getShiftBoundaries :: ColumnIndex -> Reader Configuration Boundaries
 getShiftBoundaries 0 = pure $ Boundaries (0, 1)
 getShiftBoundaries position = do
-    width <- asks _trackWidth
+    width <- asks (^. options . trackWidth)
     return $ if position == width - 1
              then Boundaries (position - 1, position)
              else Boundaries (position - 1, position + 1)
 
 interpret :: Track -> StdGen -> State
-interpret track' generator' = _track $ runReader initialise defaultOptions
+interpret track' generator' = _track $ runReader initialise defaultConfiguration
   where
     initialise = do
          initialState <- initialiseState
@@ -163,7 +164,7 @@ interpret track' generator' = _track $ runReader initialise defaultOptions
                                                                 initialState
          State.execStateT (interpret' track') initialGenerationState
 
-interpret' :: Track -> State.StateT GenerationState (Reader Options) ()
+interpret' :: Track -> State.StateT GenerationState (Reader Configuration) ()
 interpret' (Pure _) = pure ()
 interpret' (Free (SequenceEnd track')) = do
     markedSequence' <- use markedSequence
@@ -261,7 +262,7 @@ interpret' (Free track') = do
                             ->
                             replicateM_ (fromIntegral length') generateRow
                 Condition (WithDifficultyLevel level') _ -> do
-                    maximumDifficultyLevel <- asks _trackWidth
+                    maximumDifficultyLevel <- asks (^. options . trackWidth)
                     track . difficulty . level
                           .= if level' <= maximumDifficultyLevel
                              then level'
@@ -270,7 +271,8 @@ interpret' (Free track') = do
                     oldDifficultyLevel <- use $ track . difficulty . level
                     let newDifficultyLevel = fromIntegral oldDifficultyLevel
                                            + difference
-                    maximumDifficultyLevel <- fromIntegral <$> asks _trackWidth
+                    maximumDifficultyLevel <- fromIntegral
+                                           <$> asks (^. options . trackWidth)
                     interpret' $ do
                         withDifficultyLevel . fromIntegral
                                             $ if | newDifficultyLevel < 0 -> 0
@@ -280,13 +282,13 @@ interpret' (Free track') = do
                                                  | otherwise
                                                  -> newDifficultyLevel
                 Condition (WithDifficultyLevelAmount amount') _ -> do
-                    maximumDifficultyLevel <- asks _trackWidth
+                    maximumDifficultyLevel <- asks (^. options . trackWidth)
                     interpret' . withDifficultyLevel
                                . round
                                $ fromIntegral maximumDifficultyLevel
                                * amount'
                 Condition (WithAmountAlteredDifficultyLevel difference) _ -> do
-                    maximumDifficultyLevel <- asks _trackWidth
+                    maximumDifficultyLevel <- asks (^. options . trackWidth)
                     interpret' . withAlteredDifficultyLevel
                                . round
                                $ fromIntegral maximumDifficultyLevel
@@ -301,13 +303,13 @@ interpret' (Free track') = do
                     track . difficulty . levelSlope .= SteepSlope
                 Condition (WithGradualDifficultyLevelAmountRiseSlope rise run) _
                     -> do
-                    maximumDifficultyLevel <- asks _trackWidth
+                    maximumDifficultyLevel <- asks (^. options . trackWidth)
                     let rise' = round
                               $ fromIntegral maximumDifficultyLevel * rise
                     interpret' $ withGradualDifficultyLevelSlope rise' run
                 Sequence InfiniteTailWhere _ -> cycle' .= Free track'
                 Part (MiddlePredefinedPart cell body) _ -> do
-                    width <- fromIntegral <$> asks _trackWidth
+                    width <- fromIntegral <$> asks (^. options . trackWidth)
                     when (rectangular body && length (head body) <= width) $ do
                         let bodyOffset = fromIntegral
                                        $ width - length (head body)
@@ -321,7 +323,7 @@ interpret' (Free track') = do
                                                        body
                         track . rows %= (offsettedBody ++)
                 Part (LeftPredefinedPart cell body) _ -> do
-                    width <- fromIntegral <$> asks _trackWidth
+                    width <- fromIntegral <$> asks (^. options . trackWidth)
                     when (rectangular body && length (head body) <= width) $ do
                         let rightBodyOffset = fromIntegral
                                             $ width - length (head body)
@@ -333,7 +335,7 @@ interpret' (Free track') = do
                                                             body
                         track . rows %= (rightOffsettedBody ++)
                 Part (RightPredefinedPart cell body) _ -> do
-                    width <- fromIntegral <$> asks _trackWidth
+                    width <- fromIntegral <$> asks (^. options . trackWidth)
                     when (rectangular body && length (head body) <= width) $ do
                         let leftBodyOffset = fromIntegral
                                            $ width - length (head body)
@@ -360,14 +362,15 @@ interpret' (Free track') = do
                               %= (*> Free (Pure () <$ track'))
     interpret' $ _next track'
 
-selectNextTrailPartColumns :: State.StateT GenerationState (Reader Options)
-                                                           [ColumnIndex]
+selectNextTrailPartColumns :: State.StateT GenerationState
+                                           (Reader Configuration)
+                                           [ColumnIndex]
 selectNextTrailPartColumns = do
     previouses <- ((fromIntegral <$>) . findIndices (== TrailPart))
                <$> use (track . rows . _head)
-    difficultyLevel' <- asks _trackDifficultyLevel
+    difficultyLevel' <- asks (^. options . trackDifficultyLevel)
     previousGenerator <- use generator
-    width <- asks _trackWidth
+    width <- asks (^. options . trackWidth)
     let (currentCount, nextGenerator) = randomR (0, maximumCount)
                                                 previousGenerator
         (parity, newGenerator') = randomR (0, 1) nextGenerator
@@ -409,11 +412,11 @@ initialiseGenerationState generator' state
     GenerationState generator' [] [] (Pure ()) [] Nothing 0 state
 
 generatePassPosition :: State.StateT GenerationState
-                                     (Reader Options)
+                                     (Reader Configuration)
                                      ColumnIndex
 generatePassPosition = do
     previousGenerator <- use generator
-    width <- asks _trackWidth
+    width <- asks (^. options . trackWidth)
     let (position, nextGenerator) = randomR (0 :: Int, fromIntegral $ width - 1)
                                             previousGenerator
     generator .= nextGenerator
@@ -421,10 +424,10 @@ generatePassPosition = do
 
 scatter :: Cell
         -> [Cell]
-        -> State.StateT GenerationState (Reader Options) [Cell]
+        -> State.StateT GenerationState (Reader Configuration) [Cell]
 scatter cell row = do
     difficultyLevel' <- use $ track . difficulty . level
-    width <- asks _trackWidth
+    width <- asks (^. options . trackWidth)
     passPositions <- replicateM (fromIntegral $ width - difficultyLevel')
                                 generatePassPosition
     return $ row & traversed
@@ -495,7 +498,7 @@ infiniteTailWhere = Free (Sequence InfiniteTailWhere (Pure ()))
 interpretFrom :: State -> Track -> StdGen -> State
 interpretFrom state track' generator'
     =
-    _track $ runReader initialise defaultOptions
+    _track $ runReader initialise defaultConfiguration
   where
     initialise = State.execStateT (interpret' track') initialGenerationState'
     initialGenerationState' = initialiseGenerationState generator' state
@@ -540,16 +543,17 @@ trail :: [ColumnIndex] -> [Cell] -> [Cell]
 trail = flip
       $ foldr (\index' row -> row & element (fromIntegral index') .~ TrailPart)
 
-initialiseState :: Reader Options State
+initialiseState :: Reader Configuration State
 initialiseState = do
     startRow <- generateStartRow
-    startPartLength' <- fromIntegral <$> asks _trackStartPartLength
+    startPartLength' <- fromIntegral <$> asks (^. options . trackStartPartLength)
     let startPart = replicate startPartLength' startRow
-    difficultyLevel' <- asks _trackDifficultyLevel
-    return $ State (Difficulty difficultyLevel' SteepSlope) startPart
+    difficultyLevel' <- asks (^. options . trackDifficultyLevel)
+    name' <- asks (^. preferences . trackName)
+    return $ State (Difficulty difficultyLevel' SteepSlope) startPart name'
 
 getCycle :: Track -> Track
-getCycle track' = _cycle' $ runReader initialise defaultOptions
+getCycle track' = _cycle' $ runReader initialise defaultConfiguration
   where
     initialise = do
          initialState <- initialiseState

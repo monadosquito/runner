@@ -15,4 +15,4 @@ import Data.Proxy
 main :: IO ()
 main = do
     conf <- getConfiguration (Proxy @Sys) $ Proxy @Aeson
-    runReaderT (run $ Proxy @Brick) conf
+    runReaderT (run (Proxy @Brick) $ Proxy @Aeson) conf

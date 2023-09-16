@@ -10,6 +10,9 @@
 ## Notes
 
 - Character collisioning with objects causes [effects](#table-5).
+- Whenever the game is quited, current racing progress is saved.
+- Whenever the game is entered and a racing progress saving file is present, it
+  is loaded.
 - Whenever the hit points are `0`, then a current racing progress is discarded
   and the `Main` menu is opened.
 
@@ -17,6 +20,8 @@
 
 - A number after the `HP` label is remaining character hit points.
 - A number after the `SCORE` label is a current racing score.
+- To continue a loaded racing progress, toggle the pause mode in the `Main`
+  menu.
 - To restart a racing,
     1. Return to the `Main` menu.
     2. Select the `Start` menu item.
@@ -207,7 +212,7 @@ menu actions key bindings
 |to navigate to a lower item                                      |the bottom key, the s key|
 |to return to a previously selected page, to toggle the pause mode|the escape key           |
 |to select a currently navigated item                             |the enter key            |
-|to quit                                                          |the q key                |
+|to save current racing progress and quit                         |the q key                |
 
 # Table 4
 

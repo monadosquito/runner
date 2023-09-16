@@ -12,11 +12,13 @@ import System.Random
 
 import qualified Core.Configuration.Configuration as Configuration
 
+import Control.Lens
 
-configure :: Options -> Track -> StdGen -> State
-configure options' track' generator'
+
+configure :: Configuration -> Track -> StdGen -> State
+configure configuration track' generator'
     =
-    _track . runReader initialise $ Configuration.fix options'
+    _track $ runReader initialise $ configuration & options %~ Configuration.fix
   where
     initialise = do
         initialState <- initialiseState
@@ -24,12 +26,14 @@ configure options' track' generator'
                                                                initialState
         State.execStateT (interpret' track') initialGenerationState
 
-configureFrom :: Options -> State -> Track -> StdGen -> State
-configureFrom options'
+configureFrom :: Configuration -> State -> Track -> StdGen -> State
+configureFrom configuration
     =
-    \state track' generator'
+    \initialState track' generator'
     ->
     let initialise = State.execStateT (interpret' track') initialGenerationState
-        initialGenerationState = initialiseGenerationState generator' state
+        initialGenerationState = initialiseGenerationState generator'
+                                                           initialState
     in
-        _track . runReader initialise $ Configuration.fix options'
+        _track . runReader initialise
+               $ configuration & options %~ Configuration.fix

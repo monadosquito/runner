@@ -1,4 +1,7 @@
 {-# lANGUAGE OverloadedStrings #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE StandaloneDeriving #-}
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 
 
 module Driver.Parser.Aeson where
@@ -10,7 +13,14 @@ import Core.Port.Parser
 import Control.Lens
 import Data.Aeson.Lens
 import Data.Text
-import Control.Monad.State
+import qualified Control.Monad.State as State
+
+import Core.Character.Character
+import qualified Core.Track.Character.Character as Character
+import qualified Core.Track.Track as Track
+
+import qualified Data.Aeson as Aeson
+import qualified GHC.Generics as Gen
 
 
 data Aeson
@@ -42,4 +52,28 @@ instance Parser Aeson where
                 | Just optVal <- conf ^? key optName . optType
                 = optSetter .= optVal
                 | otherwise = return ()
-        in execState dfltNotSetOpts defaultConfiguration
+        in State.execState dfltNotSetOpts defaultConfiguration
+    serialiseExternalState _ = Aeson.encode
+    deserialiseExternalState _ = Aeson.decode
+
+instance Aeson.FromJSON Character.State where
+instance Aeson.FromJSON ExternalState where
+instance Aeson.FromJSON Position where
+instance Aeson.FromJSON Track.Cell where
+instance Aeson.FromJSON Track.Difficulty where
+instance Aeson.FromJSON Track.Slope where
+instance Aeson.FromJSON Track.State where
+instance Aeson.ToJSON Character.State where
+instance Aeson.ToJSON ExternalState where
+instance Aeson.ToJSON Position where
+instance Aeson.ToJSON Track.Cell where
+instance Aeson.ToJSON Track.Difficulty where
+instance Aeson.ToJSON Track.Slope where
+instance Aeson.ToJSON Track.State where
+deriving instance Gen.Generic Character.State
+deriving instance Gen.Generic ExternalState
+deriving instance Gen.Generic Position
+deriving instance Gen.Generic Track.Cell
+deriving instance Gen.Generic Track.Difficulty
+deriving instance Gen.Generic Track.Slope
+deriving instance Gen.Generic Track.State
