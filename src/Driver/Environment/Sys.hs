@@ -51,6 +51,12 @@ instance Environment Sys where
                                                 <> short 'd'
                                                 <> value (_trackDifficultyLevel opts)
                                                )
+                                    <*> option auto
+                                               (long "track-start-part-length"
+                                                <> metavar "NATURAL_NUMBER"
+                                                <> short 'l'
+                                                <> value (_trackStartPartLength opts)
+                                               )
         argConf <- execParser
                  $ info (readConf defaultConfiguration <**> helper)
                         fullDesc

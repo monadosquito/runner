@@ -380,6 +380,7 @@ staticLengthFinitePart length'
 initialGenerationState :: StdGen -> Reader Options GenerationState
 initialGenerationState generator' = do
     startLine <- generateStartLine
+    startPartLength' <- fromIntegral <$> asks _trackStartPartLength
     let startPart = startLine List.:| replicate (startPartLength' - 1) startLine
     difficultyLevel' <- asks _trackDifficultyLevel
     return $ GenerationState startPart
@@ -390,8 +391,6 @@ initialGenerationState generator' = do
                              (Pure ())
                              (Pure ())
                              Nothing
-  where
-    startPartLength' = fromIntegral startPartLength
 
 generatePassPosition :: StateT GenerationState (Reader Options) Position
 generatePassPosition = do
@@ -520,6 +519,3 @@ trail = flip (foldrM (\index' line'
                       pure $ line' & element (fromIntegral index') .~ TrailPart
                      )
              )
-
-startPartLength :: Natural
-startPartLength = 3

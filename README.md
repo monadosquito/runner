@@ -114,6 +114,13 @@ options
         <td>a number of track lines rendered at a time</td>
     </tr>
     <tr>
+        <td>Track start part length</td>
+        <td><code>3</code></td>
+        <td><code>--track-start-part-length</code> (<code>-p</code>)</td>
+        <td><code>trackStartPartLength</code></td>
+        <td>a number of track start lines contained in all start parts</td>
+    </tr>
+    <tr>
         <td>Track width</td>
         <td><code>5</code></td>
         <td><code>--track-width</code> (<code>-w</code>)</td>

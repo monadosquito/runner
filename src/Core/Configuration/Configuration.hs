@@ -31,6 +31,7 @@ data Preferences = Preferences { _trackName :: TrackName
 
 data Options = Options { _trackWidth :: TrackWidth
                        , _trackDifficultyLevel :: TrackDifficultyLevel
+                       , _trackStartPartLength :: Natural
                        }
 
 
@@ -54,6 +55,7 @@ defaultOptions :: Options
 defaultOptions = Options { _trackWidth = 5
                          , _trackDifficultyLevel = _trackWidth defaultOptions
                                                  `div` 2
+                         , _trackStartPartLength = 3
                          }
 
 fix :: Options -> Options
