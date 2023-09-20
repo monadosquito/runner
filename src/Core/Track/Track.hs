@@ -300,8 +300,7 @@ interpret' (Free track') = do
                 Sequence InfiniteTailWhere _ -> cycle' .= Free track'
                 Part (MiddlePredefinedPart cell body) _ -> do
                     width <- fromIntegral <$> asks _trackWidth
-                    when (rectangular body && length (head body) <= width)
-                         $ do
+                    when (rectangular body && length (head body) <= width) $ do
                         let bodyOffset = fromIntegral
                                        $ width - length (head body)
                             leftBodyOffset = bodyOffset `div` 2
@@ -327,8 +326,7 @@ interpret' (Free track') = do
                         track . rows %= (rightOffsettedBody ++)
                 Part (RightPredefinedPart cell body) _ -> do
                     width <- fromIntegral <$> asks _trackWidth
-                    when (rectangular body && length (head body) <= width)
-                         $ do
+                    when (rectangular body && length (head body) <= width) $ do
                         let leftBodyOffset = fromIntegral
                                            $ width - length (head body)
                             leftOffsettedBody = offsetBody cell

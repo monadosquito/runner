@@ -15,7 +15,7 @@
   otherwise it is a nearest boundary.
 - A difficulty level difference must be an integer having absolute value not
   greater than a track width, otherwise it is a nearest boundary.
-- Predefined track lines lengths must not be `0` or greater than a track width,
+- Predefined track rows lengths must not be `0` or greater than a track width,
   otherwise they are ignored.
 
 ## Hints
@@ -49,25 +49,25 @@ configuration file or as command arguments.
 
 track smart constructor effects
 
-|Smart constructor                          |Effect                                                                                                                |
-|-------------------------------------------|----------------------------------------------------------------------------------------------------------------------|
-|`dynamicLengthFinitePart`                  |A number, selected within a given range, of track lines is generated.                                                 |
-|`eitherSequenceWhere`                      |A following track sequence up to the same or `eitherSequenceEnd` smart constructor can be selected to be generated.   |
-|`infiniteTailWhere`                        |A following track sequence is repeated infinitely.                                                                    |
-|`leftPredefinedPart`                       |Given track lines offsetted from the left with a given `Core.Track.Cell` value are appended to a track.               |
-|`middlePredefinedPart`                     |Given track lines offsetted from both sides with a given `Core.Track.Cell` value are appended to a track.             |
-|`rightPredefinedPart`                      |Given track lines offsetted from the right with a given `Core.Track.Cell` value are appended to a track.              |
-|`repeatedSequenceWhere`                    |A following track sequence is repeated a given number of times.                                                       |
-|`sequenceEnd`                              |A previous sequence is generated.                                                                                     |
-|`staticLengthFinitePart`                   |A given number of track lines is generated.                                                                           |
-|`withAlteredDifficultyLevel`               |A given integer is added to a current difficulty level.                                                               |
-|`withAmountAlteredDifficultyLevel`         |A given maximum difficulty level amount is added to a current difficulty level.                                       |
-|`withDifficultyLevel`                      |A given track difficulty level is set as a current one.                                                               |
-|`withDifficultyLevelAmount`                |A given maximum difficulty level amount is set as a current difficulty level.                                         |
-|`withGradualDifficultyLevelAmountRiseSlope`|A following track sequence is generated altering a difficulty level by a its amount every given number of lines.      |
-|`withGradualDifficultyLevelSlope`          |A following track sequence is generated altering a difficulty level by a given difference every given number of lines.|
-|`withProbability`                          |An either sequence within which it is present is selected with a given probability.                                   |
-|`withSteepDifficultyLevelSlope`            |A following sequence has a steep difficulty level.                                                                    |
+|Smart constructor                          |Effect                                                                                                               |
+|-------------------------------------------|---------------------------------------------------------------------------------------------------------------------|
+|`dynamicLengthFinitePart`                  |A number, selected within a given range, of track rows is generated.                                                 |
+|`eitherSequenceWhere`                      |A following track sequence up to the same or `eitherSequenceEnd` smart constructor can be selected to be generated.  |
+|`infiniteTailWhere`                        |A following track sequence is repeated infinitely.                                                                   |
+|`leftPredefinedPart`                       |Given track rows offsetted from the left with a given `Core.Track.Cell` value are appended to a track.               |
+|`middlePredefinedPart`                     |Given track rows offsetted from both sides with a given `Core.Track.Cell` value are appended to a track.             |
+|`rightPredefinedPart`                      |Given track rows offsetted from the right with a given `Core.Track.Cell` value are appended to a track.              |
+|`repeatedSequenceWhere`                    |A following track sequence is repeated a given number of times.                                                      |
+|`sequenceEnd`                              |A previous sequence is generated.                                                                                    |
+|`staticLengthFinitePart`                   |A given number of track rows is generated.                                                                           |
+|`withAlteredDifficultyLevel`               |A given integer is added to a current difficulty level.                                                              |
+|`withAmountAlteredDifficultyLevel`         |A given maximum difficulty level amount is added to a current difficulty level.                                      |
+|`withDifficultyLevel`                      |A given track difficulty level is set as a current one.                                                              |
+|`withDifficultyLevelAmount`                |A given maximum difficulty level amount is set as a current difficulty level.                                        |
+|`withGradualDifficultyLevelAmountRiseSlope`|A following track sequence is generated altering a difficulty level by a its amount every given number of rows.      |
+|`withGradualDifficultyLevelSlope`          |A following track sequence is generated altering a difficulty level by a given difference every given number of rows.|
+|`withProbability`                          |An either sequence within which it is present is selected with a given probability.                                  |
+|`withSteepDifficultyLevelSlope`            |A following sequence has a steep difficulty level.                                                                   |
 
 # Table 2
 
@@ -111,14 +111,14 @@ options
         <td><code>10</code></td>
         <td><code>--track-piece-capacity</code> (<code>-p</code>)</td>
         <td><code>trackPieceCapacity</code></td>
-        <td>a number of track lines rendered at a time</td>
+        <td>a number of track rows rendered at a time</td>
     </tr>
     <tr>
         <td>Track start part length</td>
         <td><code>3</code></td>
         <td><code>--track-start-part-length</code> (<code>-p</code>)</td>
         <td><code>trackStartPartLength</code></td>
-        <td>a number of track start lines contained in all start parts</td>
+        <td>a number of track start rows contained in all start parts</td>
     </tr>
     <tr>
         <td>Track width</td>
