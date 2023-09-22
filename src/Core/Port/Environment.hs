@@ -3,11 +3,9 @@ module Core.Port.Environment where
 
 import Core.Configuration.Configuration
 
-import Data.ByteString.Lazy
 import Data.Proxy
+import Core.Port.Parser
 
 
 class Environment e where
-    getConfiguration :: Proxy e
-                     -> (ByteString -> Configuration)
-                     -> IO Configuration
+    getConfiguration :: Parser p => Proxy e -> Proxy p -> IO Configuration

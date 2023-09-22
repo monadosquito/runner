@@ -15,10 +15,12 @@ import Control.Lens
 
 import Core.Script.Track
 
+import Core.Port.Parser
+
 
 data Sys
 instance Environment Sys where
-    getConfiguration _ parseConf = do
+    getConfiguration _ parser = do
         let readPrefs prefs' = Preferences
                              <$> strOption (completeWith (map fst tracks)
                                             <> long "track-name"
@@ -61,7 +63,7 @@ instance Environment Sys where
                  $ info (readConf defaultConfiguration <**> helper)
                         fullDesc
         fileConf <- catch @IOException
-                          (parseConf
+                          (parseConfiguration parser
                            <$> ByteString.readFile (argConf
                                                     ^. preferences
                                                     . configurationFilePath

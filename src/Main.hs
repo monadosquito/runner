@@ -11,7 +11,6 @@ import Data.Proxy
 import System.Random
 
 import Core.Port.Environment
-import Core.Port.Parser
 
 import Core.Script.Track
 
@@ -51,7 +50,7 @@ data FlowInput = FlowInput { trackCells :: [[Cell]]
 main :: IO ()
 main = do
     gen <- newStdGen
-    conf <- getConfiguration (Proxy @Sys) . parseConfiguration $ Proxy @Aeson
+    conf <- getConfiguration (Proxy @Sys) $ Proxy @Aeson
     run gen conf $ \FlowInput {..} -> do
         forM_ [0..trackPiecesCnt - 1] $ \ix' -> do
             rndrTrackPiece ix' trackPieceCap trackCells
