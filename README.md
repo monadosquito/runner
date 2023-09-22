@@ -15,8 +15,8 @@
   otherwise it is a nearest boundary.
 - A difficulty level difference must be an integer having absolute value not
   greater than a track width, otherwise it is a nearest boundary.
-- Predefined track lines lengths must not be empty and greater than a track
-  width, otherwise they are ignored.
+- Predefined track lines lengths must not be `0` or greater than a track width,
+  otherwise they are ignored.
 
 ## Hints
 
