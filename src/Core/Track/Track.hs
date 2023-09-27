@@ -301,7 +301,7 @@ interpret' (Free track) = do
                                                                )
                                                        )
                                                        body
-                        cells %= (List.prependList offsettedBody)
+                        cells %= (`List.appendList` offsettedBody)
                 Part (LeftPredefinedPart cell body) _ -> do
                     width <- fromIntegral <$> asks _trackWidth
                     when (isRectangular body && length (head body) <= width) $ do
@@ -313,7 +313,7 @@ interpret' (Free track) = do
                                                                     )
                                                             )
                                                             body
-                        cells %= (List.prependList rightOffsettedBody)
+                        cells %= (`List.appendList` rightOffsettedBody)
                 Part (RightPredefinedPart cell body) _ -> do
                     width <- fromIntegral <$> asks _trackWidth
                     when (isRectangular body && length (head body) <= width)
@@ -326,7 +326,7 @@ interpret' (Free track) = do
                                                                    )
                                                            )
                                                            body
-                        cells %= (List.prependList leftOffsettedBody)
+                        cells %= (`List.appendList` leftOffsettedBody)
                 Part (DynamicLengthFinitePart (Range range)) _ -> do
                     previousGenerator <- use generator
                     let range' = range & each %~ fromIntegral @Natural @Int
