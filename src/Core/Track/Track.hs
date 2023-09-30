@@ -484,9 +484,7 @@ middlePredefinedPart cell body
     Free ((Part (MiddlePredefinedPart cell body)) (Pure ()))
 
 isRectangular :: PartBody -> Bool
-isRectangular body
-    =
-    not (null $ head body) && all ((== length (head body)) . length) body
+isRectangular body = all ((== length (head body)) . length) body
 
 leftPredefinedPart :: Cell -> PartBody -> Track
 leftPredefinedPart cell body
