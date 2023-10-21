@@ -66,8 +66,9 @@ data GenerationState = GenerationState { _cells :: List.NonEmpty [Cell]
                                        , _eitherSequences :: [Track]
                                        , _probabilities :: [Probability]
                                        , _cycle' :: Track
-                                       , _repeatedSequence :: Track
+                                       , _repeatedSequences :: [(Count, Track)]
                                        , _markedSequence :: Maybe MarkedSequence
+                                       , _sequenceEndsCount :: Count
                                        }
 
 data Track' next = Condition { _condition :: Condition
@@ -159,7 +160,6 @@ interpret' :: Track -> StateT GenerationState (Reader Options) ()
 interpret' (Pure _) = pure ()
 interpret' (Free (SequenceEnd track)) = do
     markedSequence' <- use markedSequence
-    markedSequence .= Nothing
     case markedSequence' of
         Just EitherSequence -> do
             eitherSequences' <- use eitherSequences
@@ -167,6 +167,7 @@ interpret' (Free (SequenceEnd track)) = do
             previousGenerator <- use generator
             probabilities' <- use probabilities
             probabilities .= []
+            markedSequence .= Nothing
             if length eitherSequences' == length probabilities'
                && foldMap Sum probabilities' == 1
             then do
@@ -201,10 +202,26 @@ interpret' (Free (SequenceEnd track)) = do
                                                                    previousGenerator
                 generator .= nextGenerator
                 interpret' $ eitherSequences' !! eitherSequenceIndex
-        Just (RepeatedSequence count) -> do
-            repeatedSequence' <- use repeatedSequence
-            repeatedSequence .= Pure ()
-            interpret' $ replicateM_ (fromIntegral count) repeatedSequence'
+        Just (RepeatedSequence _) -> do
+            sequenceEndsCount %= (+ 1)
+            sequenceEndsCount' <- fromIntegral @Natural @Int
+                               <$> use sequenceEndsCount
+            repeatedSequences' <- use repeatedSequences
+            let repeatedSequencesCount = fromIntegral
+                                       $ length repeatedSequences'
+            when (sequenceEndsCount' == repeatedSequencesCount) $ do
+                markedSequence .= Nothing
+                repeatedSequences .= []
+                sequenceEndsCount .= 0
+                let repeatedSequence
+                        = foldl (\sequence' (count', next')
+                                 ->
+                                 let count = fromIntegral count'
+                                 in replicateM_ count $ next' *> sequence'
+                                )
+                                (Pure ())
+                                repeatedSequences'
+                interpret' repeatedSequence
         Nothing -> return ()
     interpret' track
 interpret' (Free (Sequence EitherSequenceWhere track)) = do
@@ -216,6 +233,7 @@ interpret' (Free (Condition (WithProbability probability') track)) = do
     interpret' track
 interpret' (Free (Sequence (RepeatedSequenceWhere count) track)) = do
     markedSequence .= Just (RepeatedSequence count)
+    repeatedSequences %= ((count, Pure ()) :)
     interpret' track
 interpret' (Free track) = do
     markedSequence' <- use markedSequence
@@ -326,12 +344,13 @@ interpret' (Free track) = do
                                                            previousGenerator
                     generator .= nextGenerator
                     interpret' . staticLengthFinitePart $ fromIntegral length'
-        Just EitherSequence
-            ->
+        Just EitherSequence -> do
             eitherSequences . _head %= (*> Free (Pure () <$ track))
-        Just (RepeatedSequence _)
-            -> do
-            repeatedSequence %= (*> Free (Pure () <$ track))
+        Just (RepeatedSequence _) -> do
+            lastIndex <- fromIntegral <$> use sequenceEndsCount
+            repeatedSequences . ix lastIndex
+                              . _2
+                              %= (*> Free (Pure () <$ track))
     interpret' $ _next track
 
 selectNextTrailPartPositions :: StateT GenerationState (Reader Options)
@@ -389,8 +408,9 @@ initialGenerationState generator' = do
                              []
                              []
                              (Pure ())
-                             (Pure ())
+                             []
                              Nothing
+                             0
 
 generatePassPosition :: StateT GenerationState (Reader Options) Position
 generatePassPosition = do
