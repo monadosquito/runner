@@ -3,8 +3,9 @@ module Core.Script.Track.Track2 where
 
 import Core.Track
 
-import Core.Script.Track.Track1
-
 
 track2 :: Track
-track2 = track1 *> track1
+track2 = do
+    infiniteTailWhere
+    withGradualDifficultyLevelAmountRiseSlope 0.1 2
+    staticLengthFinitePart 10

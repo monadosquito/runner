@@ -8,4 +8,7 @@ import Core.Script.Track.Track2
 
 
 defaultTrack :: Track
-defaultTrack = track1 *> track2
+defaultTrack = do
+    track1
+    withDifficultyLevel 0
+    track2

@@ -5,26 +5,30 @@ import Core.Track
 
 
 track1 :: Track
-track1 = repeatedSequenceWhere 2
-       *> middlePredefinedPart Obstacle [[TrailPart, TrailPart, TrailPart]]
-       *> sequenceEnd
-       *> repeatedSequenceWhere 2
-       *> leftPredefinedPart Obstacle [[TrailPart, TrailPart, TrailPart]]
-       *> sequenceEnd
-       *> repeatedSequenceWhere 2
-       *> rightPredefinedPart Obstacle [[TrailPart, TrailPart, TrailPart]]
-       *> sequenceEnd
-       *> eitherSequenceWhere
-       *> withProbability 0.9
-       *> dynamicLengthFinitePart (5, 15)
-       *> eitherSequenceWhere
-       *> withAmountAlteredDifficultyLevel 0.5
-       *> withProbability 0.1
-       *> dynamicLengthFinitePart (5, 10)
-       *> sequenceEnd
-       *> withGradualDifficultyLevelAmountRiseSlope 0.1 2
-       *> staticLengthFinitePart 10
-       *> withSteepDifficultyLevelSlope
-       *> staticLengthFinitePart 10
-       *> infiniteTailWhere
-       *> staticLengthFinitePart 10
+track1 = do
+    repeatedSequenceWhere 5
+    middlePredefinedPart TrailPart [[]]
+    repeatedSequenceWhere 2
+    middlePredefinedPart TrailPart [obstacle 2 ++ trailPart 3 ++ obstacle 2]
+    sequenceEnd
+    sequenceEnd
+    eitherSequenceWhere
+    withProbability 0.4
+    withDifficultyLevel 0
+    staticLengthFinitePart 10
+    eitherSequenceWhere
+    withProbability 0.4
+    withDifficultyLevelAmount 0.5
+    dynamicLengthFinitePart (10, 20)
+    eitherSequenceWhere
+    withProbability 0.2
+    middlePredefinedPart TrailPart [[]]
+    sequenceEnd
+    middlePredefinedPart TrailPart [obstacle 3 ++ trailPart 1 ++ obstacle 3]
+    repeatedSequenceWhere 4
+    middlePredefinedPart TrailPart [obstacle 1 ++ trailPart 5 ++ obstacle 1]
+    sequenceEnd
+    middlePredefinedPart TrailPart [obstacle 3 ++ trailPart 1 ++ obstacle 3]
+  where
+    obstacle = (`replicate` Obstacle)
+    trailPart = (`replicate` TrailPart)
