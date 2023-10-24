@@ -226,19 +226,11 @@ interpret' (Free track) = do
                     difficultyLevelSlope' <- use $ difficulty . levelSlope
                     case difficultyLevelSlope' of
                         GradualSlope rise run -> do
-                            width <- asks _trackWidth
-                            if length' `div` run * fromIntegral rise <= width
-                            then do
-                                difficulty . levelSlope .= SteepSlope
-                                let piecesCount = fromIntegral
-                                                $ length' `div` run
-                                interpret' . replicateM_ piecesCount $ do
-                                    withAlteredDifficultyLevel rise
-                                    staticLengthFinitePart run
-                                difficulty . levelSlope .= difficultyLevelSlope'
-                            else do
-                                difficulty . levelSlope .= SteepSlope
-                                interpret' $ staticLengthFinitePart length'
+                            difficulty . levelSlope .= SteepSlope
+                            let piecesCount = fromIntegral $ length' `div` run
+                            interpret' . replicateM_ piecesCount $ do
+                                withAlteredDifficultyLevel rise
+                                staticLengthFinitePart run
                         SteepSlope
                             ->
                             replicateM_ (fromIntegral length') generateLine
