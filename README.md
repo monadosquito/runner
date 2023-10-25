@@ -2,8 +2,11 @@
 
 1. Navigate through the menus using the [menu actions key
    bindings](#table-3).
-2. Select the `Start` item of the `Main` menu.
-3. Control the character using the [default character action key
+2. Select the `Track Select` menu item.
+3. Select one of the listed tracks.
+4. Return to the `Main` menu.
+5. Select the `Start` menu item.
+6. Control the character using the [default character action key
    bindings](#table-4) or [custom ones](#custom-character-key-bindings) to
    avoid [obstacles](#table-5) and acquire a higher score.
 
@@ -18,6 +21,8 @@
 
 ## Hints
 
+- A currently selected track is marked with the `*` character to the right of
+  it.
 - A number after the `HP` label is remaining character hit points.
 - A number after the `SCORE` label is a current racing score.
 - To continue a loaded racing progress, toggle the pause mode in the `Main`

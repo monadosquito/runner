@@ -2,6 +2,7 @@
 
 ## Added
 
+- A current track can be selected.
 - Current racing progress saving is added.
 - Current racing scoring is added.
 - The character can be damaged.

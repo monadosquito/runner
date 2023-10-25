@@ -49,11 +49,16 @@ import qualified Core.Port.Parser as Parser
 
 import Data.Proxy
 import qualified Data.ByteString.Lazy.Char8 as ByteString
+import qualified Data.List.NonEmpty as NEList
 
 
-data Page = RacePage | KBindsPage deriving (Bounded, Enum, Eq, Ord)
+data Page = RacePage
+          | TrackSlctPage
+          | KBindsPage
+          deriving (Bounded, Enum, Eq, Ord)
 instance Show Page where
     show RacePage = "Start"
+    show TrackSlctPage = "Track Select"
     show KBindsPage = "Key Bindings"
 
 data GlobState = GlobState { _currTrackCycPiecesCnt
@@ -266,27 +271,60 @@ draw = do
                                  ++ fromJust (comSepSlctSigKBinds sig)
                                  ++ "   "
             sig' = toEnum slctMenuItemIx' :: Signal
+        f (LocState (Just TrackSlctPage)
+           _
+           _
+           slctMenuItemIx'
+           (Parser.ExternalState _ _ (Track.State _ _ name))
+          )
+            = [ center . foldl (<=>) emptyWidget
+                       . map str
+                       . (& imap (\ix' trackName'
+                                  ->
+                                  if | ix' == slctMenuItemIx'
+                                     && trackName' == name
+                                     -> "* " ++ trackName' ++ " *"
+                                     | ix' == slctMenuItemIx'
+                                     -> "* " ++ trackName'
+                                     | trackName' == name
+                                     -> "  " ++ trackName' ++ " *"
+                                     | otherwise
+                                     -> "  " ++ trackName'
+                                 )
+                         )
+                       . NEList.toList
+                       $ Map.keys tracks'
+              ]
         f (LocState Nothing _ _ slctMenuItemIx' _)
             =
-            case slctPage of
+            case toEnum slctMenuItemIx' of
                 RacePage -> slctRacePage
+                TrackSlctPage -> slctTrackSlctPage
                 KBindsPage -> slctKBindsPage
           where
             slctKBindsPage
                 =
                 [ hCenter (str "Main")
                   <=> center (str ("  " ++ show RacePage)
-                              <=> str ("* " ++ show KBindsPage)
-                             )
+                  <=> str ("  " ++ show TrackSlctPage)
+                  <=> str ("* " ++ show KBindsPage))
                 ]
             slctRacePage
                 =
                 [ hCenter (str "Main")
                   <=> center (str ("* " ++ show RacePage)
+                              <=> str ("  " ++ show TrackSlctPage)
                               <=> str ("  " ++ show KBindsPage)
                              )
                 ]
-            slctPage = toEnum slctMenuItemIx'
+            slctTrackSlctPage
+                =
+                [ hCenter (str "Main")
+                  <=> center (str ("  " ++ show RacePage)
+                              <=> str ("* " ++ show TrackSlctPage)
+                              <=> str ("  " ++ show KBindsPage)
+                             )
+                ]
     return f
 
 hndlEv :: Parser.Parser p
@@ -297,7 +335,6 @@ hndlEv :: Parser.Parser p
                   IO
                   (BrickEvent () FlowEvent -> EventM () LocState ())
 hndlEv globStateRef evChan parser = do
-    currTrackName <- asks (^. preferences . trackName)
     opts <- asks _options
     trackPieceCap <- asks (^. preferences
                            . trackPieceCapacity
@@ -305,264 +342,248 @@ hndlEv globStateRef evChan parser = do
                           )
     conf <- ask
     let interpretFrom' = configureFrom conf
-        currTrack = tracks' Map.! currTrackName
         interpret'' = configure conf
-    return $ \case
-                 AppEvent FeedTrackRow -> do
-                     prevCharPos <- use (ext
-                                         . Parser.character
-                                         . Char.position
-                                        )
-                     trackRows <- use (ext . Parser.track . Track.rows)
-                     ext . Parser.character
-                         %= Char.obstruct (progress prevCharPos)
-                                          trackRows
-                     charHP <- use (ext
-                                    . Parser.character
-                                    . Char.hitPoints
-                                   )
-                     cellAheadChar <- getCellAheadChar
-                     nextCharPos <- use (ext
-                                         . Parser.character
-                                         . Char.position
-                                        )
-                     let obstAheadChar = cellAheadChar
-                                         == Just Track.Obstacle
-                         charDead = charHP == 0
-                         charMoved = prevCharPos /= nextCharPos
-                     if (obstAheadChar && not charMoved)
-                     then liftIO $ do
-                         modifyIORef globStateRef
-                                     (& currTrackPieceCharHitsCnt
-                                      %~ (+ 1)
-                                     )
-                     else do
-                         ext . Parser.score %= (+ 1)
-                     liftIO $ do
-                         modifyIORef globStateRef
-                                     $ (& charStrafed .~ False)
-                                       . (& charStuck .~ obstAheadChar)
-                         when charDead $ do
-                             savExists <- doesFileExist savFileName
-                             when savExists $ removeFile savFileName
-                             writeBChan evChan Fin
-                             writeBChan evChan Start
-                 AppEvent FeedTrackPiece -> do
-                     ext . Parser.track . Track.rows %= drop (trackPieceCap - 1)
-                     liftIO $ do
-                         modifyIORef globStateRef
-                                     (& currTrackPieceCharHitsCnt .~ 0)
-                 AppEvent FeedTrackCyc -> do
-                     gen <- newStdGen
-                     prevTrackState <- use (ext . Parser.track)
-                     let initTrackState = prevTrackState
-                                        & Track.rows
-                                        %~ (pure . last)
-                         currTrackCyc = Track.getCycle currTrack
-                         contTrackState = interpretFrom' initTrackState
-                                                         currTrackCyc
-                                                         gen
-                         currTrackCycRowsCnt = contTrackState
-                                             ^. Track.rows
-                                             . to length
-                         currTrackCycPiecesCnt' = currTrackCycRowsCnt
-                                                `div` trackPieceCap
-                         currTrackCycRemRowsCnt' = currTrackCycRowsCnt
-                                                 `mod` trackPieceCap
-                                                 + (currTrackCycPiecesCnt'
-                                                    - 1
-                                                   )
-                     ext . Parser.track .= contTrackState
-                     ext . Parser.track . Track.rows %= reverse
-                     salvageChar
-                     liftIO $ do
-                         modifyIORef globStateRef
-                                     $ (& currTrackCycPiecesCnt
-                                        .~ currTrackCycPiecesCnt'
-                                       )
-                                       . (& currTrackCycRemRowsCnt
-                                          .~ currTrackCycRemRowsCnt'
-                                         )
-                                       . (charStuck .~ False)
-                 AppEvent Fin -> do
-                     actPage .= Nothing
-                 AppEvent ReturnChar -> do
-                     ext . Parser.character . Char.position %= backtrack
-                 AppEvent Start -> do
-                     gen <- newStdGen
-                     let currTrackState = interpret'' currTrack gen
-                         currTrackRowsCnt = currTrackState
-                                          ^. Track.rows
-                                          . to length
-                         currTrackPiecesCnt' = currTrackRowsCnt
-                                             `div` trackPieceCap
-                         currTrackRemRowsCnt' = currTrackRowsCnt
-                                              `mod` trackPieceCap
-                                              + (currTrackPiecesCnt' - 1)
-                     ext . Parser.character .= runReader Char.revive opts
-                     ext . Parser.track .= currTrackState
-                     ext . Parser.track . Track.rows %= reverse
-                     ext . Parser.score .= 0
-                     liftIO $ do
-                         modifyIORef globStateRef
-                                     $ (& charStuck .~ False)
-                                       . (& currTrackPiecesCnt
-                                          .~ currTrackPiecesCnt'
-                                         )
-                                       . (& currTrackRemRowsCnt
-                                          .~ currTrackRemRowsCnt'
-                                         )
-                         savExists <- doesFileExist savFileName
-                         when savExists $ removeFile savFileName
-                 VtyEvent (Vty.EvKey k mods) -> do
-                     if | k == (Vty.KChar 'q') -> do
-                            kBinds' <- (& each
-                                        . _2
-                                        %~ Text.intercalate "," . map ppBinding
-                                       )
-                                    <$> use kBinds
-                            extState <- use ext
-                            liftIO $ do
-                                GlobState {..} <- readIORef globStateRef
-                                maybe (return ()) killThread _flowThreadId
-                                maybe (return ()) killThread _sessThreadId
-                                let (Position charPos) = extState
-                                                       ^. Parser.character
-                                                       . Char.position
-                                    charRowIx = fromIntegral $ fst charPos
-                                    sav = ByteString.unpack
-                                        . Parser.serialiseExternalState parser
-                                        $ extState & Parser.track . Track.rows
-                                                                  %~ drop (charRowIx
-                                                                           - 1
-                                                                          )
-                                                   & Parser.character . Char.position
-                                                                      %~ backtrack
-                                kBindsExist <- doesFileExist kBindsSavFileName
-                                when kBindsExist $ removeFile kBindsSavFileName
-                                writeFile kBindsSavFileName $ show kBinds'
-                                writeFile savFileName sav
-                            halt
-                        | k == Vty.KBS -> do
-                            actPage' <- use actPage
-                            case actPage' of
-                                Just KBindsPage -> do
-                                    kBinds' <- use kBinds
-                                    slctMenuItemIx' <- use slctMenuItemIx
-                                    let sig = toEnum slctMenuItemIx' :: Signal
-                                        kBindIx = List.findIndex ((== sig) . fst)
-                                                                 kBinds'
-                                    case kBindIx of
-                                        Just kBindIx' -> do
-                                            kBinds . ix kBindIx' . _2 .= []
-                                        Nothing -> do
-                                            return ()
-                                Nothing -> do
-                                    kBinds .= defKBinds
-                                _ -> do
-                                    return ()
-                        | k == Vty.KEnter -> do
-                            actPage' <- use actPage
-                            case actPage' of
-                                Just KBindsPage -> do
-                                    kBindsAdded %= not
-                                Nothing -> do
-                                    slctPage' <- toEnum <$> use slctMenuItemIx
-                                    actPage .= Just slctPage'
-                                    when (slctPage' == RacePage) $ do
-                                        liftIO $ do
-                                            modifyIORef globStateRef
-                                                        $ (& paused .~ False)
-                                                          . (& started .~ False)
-                                            writeBChan evChan Start
-                                    slctMenuItemIx .= 0
-                                _ -> do
-                                    return ()
-                        | k == Vty.KEsc -> do
-                            actPage' <- use actPage
-                            if actPage' == Nothing
-                            then do
-                                slctPage' <- toEnum <$> use slctMenuItemIx
-                                actPage .= Just slctPage'
-                            else do
-                                actPage .= Nothing
-                            slctPage' <- toEnum <$> use slctMenuItemIx
-                            when (slctPage' == RacePage) . liftIO $ do
-                                modifyIORef globStateRef
-                                            $ (& paused .~ False)
-                                              . (started .~ False)
-                        | k `elem` [Vty.KChar 'w', Vty.KUp] -> do
-                            slctPage' :: Page <- toEnum <$> use slctMenuItemIx
-                            when (slctPage' > minBound) $ slctMenuItemIx %= pred
-                        | k `elem` [Vty.KChar 's', Vty.KDown] -> do
-                            slctPage' :: Page <- toEnum <$> use slctMenuItemIx
-                            when (slctPage' < maxBound) $ slctMenuItemIx %= succ
-                        | otherwise -> do
-                            let kBind = binding k mods
-                            kBinds' <- use kBinds
-                            addKBinds' <- use kBindsAdded
-                            if addKBinds'
-                            then do
-                                pageItemIx' <- use slctMenuItemIx
-                                let sig = toEnum pageItemIx' :: Signal
-                                    kBindIx = List.findIndex ((== sig) . fst)
-                                                             kBinds'
-                                case kBindIx of
-                                    Just kBindIx' -> do
-                                        kBinds %= (^.. traversed
-                                                   . to (& _2
-                                                         %~ filter (/= kBind)
-                                                        )
-                                                  )
-                                        kBinds . ix kBindIx'
-                                               . _2
-                                               %= (++ [kBind])
-                                    Nothing -> do
-                                        return ()
-                            else case List.findIndex (elem kBind . snd) kBinds' of
-                                Just sigIx -> do
-                                    let sig = fst $ kBinds' !! sigIx
-                                    GlobState {..} <- liftIO
-                                                    $ readIORef globStateRef
-                                    when (not _paused) $ do
-                                        trackRows <- use (ext
-                                                          . Parser.track
-                                                          . Track.rows
-                                                         )
-                                        nextCharPos <- (`runReader` conf)
-                                                       . strafe (signalToSide sig)
-                                                    <$> use (ext
-                                                             . Parser.character
-                                                             . Char.position
-                                                            )
-                                        ext . Parser.character
-                                            %= Char.obstruct nextCharPos
-                                                             trackRows
-                                        cellAheadChar <- getCellAheadChar
-                                        charHP <- use (ext
-                                                       . Parser.character
-                                                       . Char.hitPoints
-                                                      )
-                                        liftIO $ do
-                                            let charDead = charHP == 0
-                                                obstAheadChar = cellAheadChar
-                                                                == Just Track.Obstacle
-                                            modifyIORef globStateRef
-                                                        $ (& charStrafed
-                                                           .~ True
-                                                          )
-                                                          . (& charStuck
-                                                             .~ obstAheadChar
-                                                            )
-                                            when charDead $ do
-                                                savExists <- doesFileExist savFileName
-                                                when savExists $ removeFile savFileName
-                                                writeBChan evChan Fin
-                                                writeBChan evChan Start
-                                Nothing -> do
-                                    return ()
-                 _ -> do
-                     return ()
+    return $ \ev -> do
+        currTrackName <- use (ext . Parser.track . Track.name)
+        let currTrack = tracks' Map.! currTrackName
+        case ev of
+            AppEvent FeedTrackRow -> do
+                prevCharPos <- use (ext . Parser.character . Char.position)
+                trackRows <- use (ext . Parser.track . Track.rows)
+                ext . Parser.character
+                    %= Char.obstruct (progress prevCharPos) trackRows
+                charHP <- use (ext . Parser.character . Char.hitPoints)
+                cellAheadChar <- getCellAheadChar
+                nextCharPos <- use (ext . Parser.character . Char.position)
+                let obstAheadChar = cellAheadChar == Just Track.Obstacle
+                    charDead = charHP == 0
+                    charMoved = prevCharPos /= nextCharPos
+                if (obstAheadChar && not charMoved)
+                then liftIO $ do
+                    modifyIORef globStateRef
+                                (& currTrackPieceCharHitsCnt %~ (+ 1))
+                else do
+                    ext . Parser.score %= (+ 1)
+                liftIO $ do
+                    modifyIORef globStateRef
+                                $ (& charStrafed .~ False)
+                                  . (& charStuck .~ obstAheadChar)
+                    when charDead $ do
+                        savExists <- doesFileExist savFileName
+                        when savExists $ removeFile savFileName
+                        writeBChan evChan Fin
+                        writeBChan evChan Start
+            AppEvent FeedTrackPiece -> do
+                ext . Parser.track . Track.rows %= drop (trackPieceCap - 1)
+                liftIO $ do
+                    modifyIORef globStateRef (& currTrackPieceCharHitsCnt .~ 0)
+            AppEvent FeedTrackCyc -> do
+                gen <- newStdGen
+                prevTrackState <- use (ext . Parser.track)
+                let initTrackState = prevTrackState
+                                   & Track.rows
+                                   %~ (pure . last)
+                    currTrackCyc = Track.getCycle currTrack
+                    contTrackState = interpretFrom' initTrackState
+                                                    currTrackCyc
+                                                    gen
+                    currTrackCycRowsCnt = contTrackState
+                                        ^. Track.rows
+                                        . to length
+                    currTrackCycPiecesCnt' = currTrackCycRowsCnt
+                                           `div` trackPieceCap
+                    currTrackCycRemRowsCnt' = currTrackCycRowsCnt
+                                            `mod` trackPieceCap
+                                            + (currTrackCycPiecesCnt' - 1)
+                ext . Parser.track .= contTrackState
+                ext . Parser.track . Track.rows %= reverse
+                salvageChar
+                liftIO $ do
+                    modifyIORef globStateRef
+                                $ (& currTrackCycPiecesCnt
+                                   .~ currTrackCycPiecesCnt'
+                                  )
+                                  . (& currTrackCycRemRowsCnt
+                                     .~ currTrackCycRemRowsCnt'
+                                    )
+                                  . (charStuck .~ False)
+            AppEvent Fin -> do
+                actPage .= Nothing
+            AppEvent ReturnChar -> do
+                ext . Parser.character . Char.position %= backtrack
+            AppEvent Start -> do
+                gen <- newStdGen
+                let currTrackState = interpret'' currTrack gen
+                    currTrackRowsCnt = currTrackState ^. Track.rows . to length
+                    currTrackPiecesCnt' = currTrackRowsCnt
+                                        `div` trackPieceCap
+                    currTrackRemRowsCnt' = currTrackRowsCnt
+                                         `mod` trackPieceCap
+                                         + (currTrackPiecesCnt' - 1)
+                ext . Parser.character .= runReader Char.revive opts
+                oldCurrTrackName <- use (ext . Parser.track . Track.name)
+                ext . Parser.track .= currTrackState
+                ext . Parser.track . Track.rows %= reverse
+                ext . Parser.score .= 0
+                ext . Parser.track . Track.name .= oldCurrTrackName
+                liftIO $ do
+                    modifyIORef globStateRef
+                                $ (& charStuck .~ False)
+                                  . (& currTrackPiecesCnt
+                                     .~ currTrackPiecesCnt'
+                                    )
+                                  . (& currTrackRemRowsCnt
+                                     .~ currTrackRemRowsCnt'
+                                    )
+                    savExists <- doesFileExist savFileName
+                    when savExists $ removeFile savFileName
+            VtyEvent (Vty.EvKey k mods) -> do
+                if | k == (Vty.KChar 'q') -> do
+                       kBinds' <- (& each
+                                   . _2
+                                   %~ Text.intercalate "," . map ppBinding
+                                  )
+                               <$> use kBinds
+                       extState <- use ext
+                       liftIO $ do
+                           GlobState {..} <- readIORef globStateRef
+                           maybe (return ()) killThread _flowThreadId
+                           maybe (return ()) killThread _sessThreadId
+                           kBindsExist <- doesFileExist kBindsSavFileName
+                           when kBindsExist $ removeFile kBindsSavFileName
+                           writeFile kBindsSavFileName $ show kBinds'
+                           let (Position charPos) = extState
+                                                  ^. Parser.character
+                                                  . Char.position
+                               charRowIx = fromIntegral $ fst charPos
+                               sav = ByteString.unpack
+                                   . Parser.serialiseExternalState parser
+                                   $ extState & Parser.track . Track.rows
+                                                             %~ drop (charRowIx
+                                                                      - 1
+                                                                     )
+                                              & Parser.character . Char.position
+                                                                 %~ backtrack
+
+                           writeFile savFileName sav
+                       halt
+                   | k == Vty.KBS -> do
+                       actPage' <- use actPage
+                       case actPage' of
+                           Just KBindsPage -> do
+                               kBinds' <- use kBinds
+                               slctMenuItemIx' <- use slctMenuItemIx
+                               let sig = toEnum slctMenuItemIx' :: Signal
+                                   kBindIx = List.findIndex ((== sig) . fst)
+                                                            kBinds'
+                               case kBindIx of
+                                   Just kBindIx' -> do
+                                       kBinds . ix kBindIx' . _2 .= []
+                                   Nothing -> do
+                                       return ()
+                           Nothing -> do
+                               kBinds .= defKBinds
+                           _ -> do
+                               return ()
+                   | k == Vty.KEnter -> do
+                       actPage' <- use actPage
+                       case actPage' of
+                           Just KBindsPage -> do
+                               kBindsAdded %= not
+                           Nothing -> do
+                               slctPage' <- toEnum <$> use slctMenuItemIx
+                               actPage .= Just slctPage'
+                               when (slctPage' == RacePage) $ do
+                                   liftIO $ do
+                                       modifyIORef globStateRef
+                                                   $ (& paused .~ False)
+                                                     . (& started .~ False)
+                                       writeBChan evChan Start
+                               slctMenuItemIx .= 0
+                           Just TrackSlctPage -> do
+                               trackIx <- use slctMenuItemIx
+                               let trackName' = Map.keys tracks'
+                                              NEList.!! trackIx
+                               ext . Parser.track . Track.name .= trackName'
+                           _ -> do
+                               return ()
+                   | k == Vty.KEsc -> do
+                       actPage' <- use actPage
+                       if actPage' == Nothing
+                       then do
+                           slctPage' <- toEnum <$> use slctMenuItemIx
+                           actPage .= Just slctPage'
+                       else do
+                           actPage .= Nothing
+                       slctPage' <- toEnum <$> use slctMenuItemIx
+                       when (slctPage' == RacePage) . liftIO $ do
+                           modifyIORef globStateRef
+                                       $ (& paused .~ False)
+                                         . (started .~ False)
+                   | k `elem` [Vty.KChar 'w', Vty.KUp] -> do
+                       slctPage' :: Page <- toEnum <$> use slctMenuItemIx
+                       when (slctPage' > minBound) $ slctMenuItemIx %= pred
+                   | k `elem` [Vty.KChar 's', Vty.KDown] -> do
+                       slctPage' :: Page <- toEnum <$> use slctMenuItemIx
+                       when (slctPage' < maxBound) $ slctMenuItemIx %= succ
+                   | otherwise -> do
+                       let kBind = binding k mods
+                       kBinds' <- use kBinds
+                       addKBinds' <- use kBindsAdded
+                       if addKBinds'
+                       then do
+                           pageItemIx' <- use slctMenuItemIx
+                           let sig = toEnum pageItemIx' :: Signal
+                               kBindIx = List.findIndex ((== sig) . fst)
+                                                        kBinds'
+                           case kBindIx of
+                               Just kBindIx' -> do
+                                   kBinds %= (^.. traversed
+                                              . to (& _2 %~ filter (/= kBind))
+                                             )
+                                   kBinds . ix kBindIx' . _2 %= (++ [kBind])
+                               Nothing -> do
+                                   return ()
+                       else case List.findIndex (elem kBind . snd) kBinds' of
+                           Just sigIx -> do
+                               let sig = fst $ kBinds' !! sigIx
+                               GlobState {..} <- liftIO $ readIORef globStateRef
+                               when (not _paused) $ do
+                                   trackRows <- use (ext
+                                                     . Parser.track
+                                                     . Track.rows
+                                                    )
+                                   nextCharPos <- (`runReader` conf)
+                                                  . strafe (signalToSide sig)
+                                               <$> use (ext
+                                                        . Parser.character
+                                                        . Char.position
+                                                       )
+                                   ext . Parser.character
+                                       %= Char.obstruct nextCharPos trackRows
+                                   cellAheadChar <- getCellAheadChar
+                                   charHP <- use (ext
+                                                  . Parser.character
+                                                  . Char.hitPoints
+                                                 )
+                                   liftIO $ do
+                                       let charDead = charHP == 0
+                                           obstAheadChar = cellAheadChar
+                                                           == Just Track.Obstacle
+                                       modifyIORef globStateRef
+                                                   $ (& charStrafed .~ True)
+                                                     . (& charStuck
+                                                        .~ obstAheadChar
+                                                       )
+                                       when charDead $ do
+                                           savExists <- doesFileExist savFileName
+                                           when savExists $ removeFile savFileName
+                                           writeBChan evChan Fin
+                                           writeBChan evChan Start
+                           Nothing -> do
+                               return ()
+            _ -> do
+                 return ()
 
 initGlobState :: GlobState
 initGlobState = GlobState 0 0 0 0 0 Nothing Nothing True True False False
