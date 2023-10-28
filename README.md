@@ -36,6 +36,8 @@
 
 - If the same key is bound to two actions, then it is bound only to a former
   one.
+- When the game is quited, current key bindings are saved.
+- when the game is entered the saved key bindings are loaded.
 
 # Create Tracks
 

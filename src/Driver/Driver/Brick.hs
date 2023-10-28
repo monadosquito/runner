@@ -6,6 +6,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications #-}
 
 
 module Driver.Driver.Brick where
@@ -38,7 +39,8 @@ import Core.Signal.Signal
 
 import Core.Script.Track
 
-import Brick.Keybindings.Pretty
+import Brick.Keybindings
+import System.Directory
 import qualified Data.List as List
 import qualified Data.Map.NonEmpty as Map
 import qualified Data.Text as Text
@@ -60,7 +62,7 @@ data GlobState = GlobState { _currTrackCycPiecesCnt
 data LocState = LocState { _charPos :: Position
                          , _track :: State
                          , _actPage :: Maybe Page
-                         , _kBinds :: [([Vty.Key], Signal)]
+                         , _kBinds :: [(Signal, [Binding])]
                          , _kBindsAdded :: Bool
                          , _slctMenuItemIx :: Int
                          }
@@ -131,7 +133,8 @@ instance Driver Brick where
             modifyIORef globStateRef (& flowThreadId .~ Just flowThreadId')
             return (currTrackState, evChan, globStateRef)
         app' <- app globStateRef
-        initLocState' <- initLocState currTrackState
+        kBinds' <- liftIO getKBinds
+        initLocState' <- initLocState currTrackState kBinds'
         liftIO $ do
             let bldVty = Vty.mkVty Vty.defaultConfig
             initVty <- bldVty
@@ -152,7 +155,7 @@ app globStateRef = do
     return $ App { appDraw = draw'
                  , appChooseCursor = neverShowCursor
                  , appHandleEvent = hndlEv'
-                 , appStartEvent = pure ()
+                 , appStartEvent = return ()
                  , appAttrMap = const $ attrMap Vty.defAttr []
                  }
 
@@ -172,31 +175,25 @@ draw = do
                          $ reflect charPos' trackPiece
                 ]
         f (LocState _ _ (Just KBindsPage) kBinds' kBindsAdded' slctMenuItemIx')
-            = case side of
-                  Left'
+            = case sig' of
+                  StrafeLeft
                       ->
                       [ hCenter (str $ show KBindsPage)
-                        <=> center (kBindWid (StrafeCharacter Left')
-                                             True
-                                             kBindsAdded'
-                                    <=> kBindWid (StrafeCharacter Right')
-                                                 False
-                                                 False
+                        <=> center (kBindWid StrafeLeft True kBindsAdded'
+                                    <=> kBindWid StrafeRight False False
                                    )
                       ]
-                  Right'
+                  StrafeRight
                       ->
                       [ hCenter (str $ show KBindsPage)
-                        <=> center (kBindWid (StrafeCharacter Left') False False
-                                    <=> kBindWid (StrafeCharacter Right')
-                                                 True
-                                                 kBindsAdded'
+                        <=> center (kBindWid StrafeLeft False False
+                                    <=> kBindWid StrafeRight True kBindsAdded'
                                    )
                       ]
           where
             comSepSlctSigKBinds sig = do
-                unqSlctSigKBinds <- (map ppKey . List.nub . fst . (kBinds' !!))
-                                 <$> List.findIndex ((== sig) . snd) kBinds'
+                unqSlctSigKBinds <- (map ppBinding . List.nub . snd . (kBinds' !!))
+                                 <$> List.findIndex ((== sig) . fst) kBinds'
                 return . Text.unpack
                        . Text.concat
                        . (++ unqSlctSigKBinds ^? _last . to (: []) ^. non [])
@@ -222,7 +219,7 @@ draw = do
                                  ++ ": "
                                  ++ fromJust (comSepSlctSigKBinds sig)
                                  ++ "   "
-            StrafeCharacter side = toEnum slctMenuItemIx' :: Signal
+            sig' = toEnum slctMenuItemIx' :: Signal
         f (LocState _ _ Nothing _ _ slctMenuItemIx')
             =
             case slctPage of
@@ -304,12 +301,21 @@ hndlEv globStateRef = do
                      charPos .= initCharPos
                      track .= track'
                      track . rows %= reverse
-                 VtyEvent (Vty.EvKey k []) -> do
+                 VtyEvent (Vty.EvKey k mods) -> do
+                     let kBind = binding k mods
                      if | k == (Vty.KChar 'q') -> do
+                            kBinds' <- (& each
+                                        . _2
+                                        %~ Text.intercalate "," . map ppBinding
+                                       )
+                                    <$> use kBinds
                             liftIO $ do
                                 GlobState {..} <- readIORef globStateRef
                                 maybe (return ()) killThread _flowThreadId
                                 maybe (return ()) killThread _sessThreadId
+                                kBindsExist <- doesFileExist kBindsSavFileName
+                                when kBindsExist $ removeFile kBindsSavFileName
+                                writeFile kBindsSavFileName $ show kBinds'
                             halt
                         | k == Vty.KBS -> do
                             actPage' <- use actPage
@@ -318,11 +324,11 @@ hndlEv globStateRef = do
                                     kBinds' <- use kBinds
                                     slctMenuItemIx' <- use slctMenuItemIx
                                     let sig = toEnum slctMenuItemIx' :: Signal
-                                        kBindIx = List.findIndex ((== sig) . snd)
+                                        kBindIx = List.findIndex ((== sig) . fst)
                                                                  kBinds'
                                     case kBindIx of
                                         Just kBindIx' -> do
-                                            kBinds . ix kBindIx' . _1 .= []
+                                            kBinds . ix kBindIx' . _2 .= []
                                         Nothing -> do
                                             return ()
                                 Nothing -> do
@@ -370,26 +376,28 @@ hndlEv globStateRef = do
                             then do
                                 pageItemIx' <- use slctMenuItemIx
                                 let sig = toEnum pageItemIx' :: Signal
-                                    kBindIx = List.findIndex ((== sig) . snd)
+                                    kBindIx = List.findIndex ((== sig) . fst)
                                                              kBinds'
                                 case kBindIx of
                                     Just kBindIx' -> do
                                         kBinds %= (^.. traversed
-                                                   . to (& _1 %~ filter (/= k))
+                                                   . to (& _2
+                                                         %~ filter (/= kBind)
+                                                        )
                                                   )
-                                        kBinds . ix kBindIx' . _1 %= (++ [k])
+                                        kBinds . ix kBindIx'
+                                               . _2
+                                               %= (++ [kBind])
                                     Nothing -> do
                                         return ()
-                            else case List.findIndex (elem k . fst) kBinds' of
+                            else case List.findIndex (elem kBind . snd) kBinds' of
                                 Just sigIx -> do
-                                    let sig = snd $ kBinds' !! sigIx
-                                    case sig of
-                                        StrafeCharacter side -> do
-                                            GlobState {..} <- liftIO
-                                                            $ readIORef globStateRef
-                                            when (not _paused) $ do
-                                                charPos %= (`runReader` opts)
-                                                           . strafe side
+                                    let sig = fst $ kBinds' !! sigIx
+                                    GlobState {..} <- liftIO
+                                                    $ readIORef globStateRef
+                                    when (not _paused) $ do
+                                        charPos %= (`runReader` opts)
+                                                   . strafe (signalToSide sig)
                                 Nothing -> do
                                     return ()
                  _ -> do
@@ -398,20 +406,47 @@ hndlEv globStateRef = do
 initGlobState ::  GlobState
 initGlobState = GlobState 0 0 Nothing Nothing True True
 
-initLocState :: State -> ReaderT Configuration IO LocState
-initLocState trackState = do
+initLocState :: State
+             -> [(Signal, [Binding])]
+             -> ReaderT Configuration IO LocState
+initLocState trackState kBinds' = do
     opts <- asks _options
     let initCharPos = runReader spawn opts
     return $ LocState initCharPos
                       (trackState & rows %~ reverse)
                       Nothing
-                      defKBinds
+                      kBinds'
                       False
                       0
 
-defKBinds :: [([Vty.Key], Signal)]
+defKBinds :: [(Signal, [Binding])]
 defKBinds
    =
-   [ ([Vty.KChar 'a', Vty.KLeft], StrafeCharacter Left')
-   , ([Vty.KChar 'd', Vty.KRight], StrafeCharacter Right')
+   [ (StrafeLeft, [bind 'a', bind Vty.KLeft])
+   , (StrafeRight, [bind 'd', bind Vty.KRight])
    ]
+
+getKBinds :: IO [(Signal, [Binding])]
+getKBinds = do
+    kBindsExist <- doesFileExist kBindsSavFileName
+    if kBindsExist
+    then do
+        kBinds' <- (& sequence)
+                   . (& each %~ sequence)
+                   . (& each . _2
+                               %~ ((\case
+                                        BindingList bl -> bl
+                                        Unbound -> []
+                                   ) <$>
+                                  )
+                                  . parseBindingList
+                     )
+                   . read @[(Signal, Text.Text)]
+                <$> readFile kBindsSavFileName
+        return $ case kBinds' of
+                     Right kBinds'' -> kBinds''
+                     Left _ -> defKBinds
+    else return defKBinds
+
+kBindsSavFileName :: String
+kBindsSavFileName = ".k-binds.sav"

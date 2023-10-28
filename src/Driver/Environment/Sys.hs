@@ -17,7 +17,6 @@ import Control.Lens
 import Core.Script.Track
 
 import Core.Port.Parser
-import Core.Character.Character
 import Core.Signal.Signal
 
 import System.IO
@@ -81,9 +80,9 @@ instance Environment Sys where
         key <- getArrK
         return $ if | key == Right 'q' -> Nothing
                     | key `elem` [Left (Just LeftArrK), Right 'a']
-                    -> Just (StrafeCharacter Left')
+                    -> Just StrafeLeft
                     | key `elem` [Left (Just RightArrK), Right 'd']
-                    -> Just (StrafeCharacter Right')
+                    -> Just StrafeRight
                     | otherwise -> Nothing
 
 data ArrK = LeftArrK | RightArrK | UpArrK | DownArrK deriving Eq
