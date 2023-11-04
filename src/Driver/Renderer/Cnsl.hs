@@ -17,7 +17,8 @@ instance Show RndredTrackCell where
     show (RndredTrackCell TrailPart) = "."
     show (RndredTrackCell Pass) = ","
     show (RndredTrackCell Character) = "x"
-    show (RndredTrackCell Enemy) = "K"
+    show (RndredTrackCell LivingEnemy) = "K"
+    show (RndredTrackCell DeadEnemy) = "%"
 
 newtype RndredTrackLines = RndredTrackLines [[Cell]]
 instance Show RndredTrackLines where

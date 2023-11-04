@@ -41,6 +41,10 @@ revive = do
     return $ State hitPoints' initialPosition
 
 isObstacle :: Track.Cell -> Bool
-isObstacle Track.Enemy = True
+isObstacle Track.LivingEnemy = True
 isObstacle Track.Obstacle = True
 isObstacle _ = False
+
+kill :: Track.Cell -> Track.Cell
+kill Track.LivingEnemy = Track.DeadEnemy
+kill cell = cell

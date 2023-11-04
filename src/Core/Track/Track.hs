@@ -55,7 +55,8 @@ newtype Range a = Range (a, a)
 newtype Offset = Offset (ColumnIndex, ColumnIndex)
 
 
-data Cell = Obstacle | TrailPart | Pass | Character | Enemy deriving Eq
+data Cell = Obstacle | TrailPart | Pass | Character | LivingEnemy | DeadEnemy
+          deriving Eq
 
 data GenerationState = GenerationState { _generator :: StdGen
                                        , _eitherSequences :: [Track]
@@ -163,7 +164,7 @@ generateRow = do
                                  parityEnemiesCells
                      else parityEnemiesCells
         else return []
-    forM_ parityEnemiesCells $ setCell Enemy
+    forM_ parityEnemiesCells $ setCell LivingEnemy
     track . rows %= (newRow :)
 
 generateObstacleRow :: Reader Configuration [Cell]

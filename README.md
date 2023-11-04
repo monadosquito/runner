@@ -7,12 +7,15 @@
 4. Return to the `Main` menu.
 5. Select the `Start` menu item.
 6. Control the character using the [default character action key
-   bindings](#table-4) or [custom ones](#key-bindings) to avoid [enemies and
-   obstacles](#table-5) and acquire a higher score.
+   bindings](#table-4) or [custom ones](#key-bindings)
+7. Avoid collisions with [enemies and obstacles](#table-5) and kill as many
+   [enemies](#table-5) as possible to acquire a higher score.
 
 ## Notes
 
 - Character collisioning with objects causes [effects](#table-5).
+- To kill an [enemy](#table-5), be to the left or right of it and
+  [swing](#table-4) towards it.
 - Whenever the game is quited, current racing progress is saved.
 - Whenever the game is entered and a racing progress saving file is present, it
   is loaded.
@@ -163,6 +166,13 @@ options
         <td>a configuration file path</td>
     </tr>
     <tr>
+        <td>Enemy killing score bonus</td>
+        <td><code>10</code></td>
+        <td><code>--enemy-killing-score-bonus</code>(<code>-t</code>)</td>
+        <td><code>enemyKillingScoreBonus</code></td>
+        <td>a score bonus acquired for killing of one enemy</td>
+    </tr>
+    <tr>
         <td>Row crossing score bonus</td>
         <td><code>1</code></td>
         <td><code>--row-crossing-score-bonus</code> (<code>-r</code>)</td>
@@ -234,14 +244,17 @@ character action key bindings
 |----------------|------------------------|
 |to strafe left  |the h key               |
 |to strafe right |the l key               |
+|to swing left   |the j key               |
+|to swing right  |the k key               |
 
 # Table 5
 
 objects
 
-|Object       |Symbols |Collision effect                             |
-|-------------|--------|---------------------------------------------|
-|a pass       |`,`, `.`|none                                         |
-|an enemy     |`K`     |the character hit points are decreased by `1`|
-|an obstacle  |`=`     |the character hit points are decreased by `1`|
-|the character|`x`     |none                                         |
+|Object        |Symbols |Collision effect                             |
+|--------------|--------|---------------------------------------------|
+|a dead enemy  |`%`     |none                                         |
+|a living enemy|`K`     |the character hit points are decreased by `1`|
+|a pass        |`,`, `.`|none                                         |
+|an obstacle   |`=`     |the character hit points are decreased by `1`|
+|the character |`x`     |none                                         |

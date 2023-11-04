@@ -235,6 +235,8 @@ draw = do
                       [ hCenter (str $ show KBindsPage)
                         <=> center (kBindWid StrafeLeft True kBindsAdded'
                                     <=> kBindWid StrafeRight False False
+                                    <=> kBindWid SwingLeft False False
+                                    <=> kBindWid SwingRight False False
                                    )
                       ]
                   StrafeRight
@@ -242,6 +244,26 @@ draw = do
                       [ hCenter (str $ show KBindsPage)
                         <=> center (kBindWid StrafeLeft False False
                                     <=> kBindWid StrafeRight True kBindsAdded'
+                                    <=> kBindWid SwingLeft False False
+                                    <=> kBindWid SwingRight False False
+                                   )
+                      ]
+                  SwingLeft
+                      ->
+                      [ hCenter (str $ show KBindsPage)
+                        <=> center (kBindWid StrafeLeft False False
+                                    <=> kBindWid StrafeRight False False
+                                    <=> kBindWid SwingLeft True kBindsAdded'
+                                    <=> kBindWid SwingRight False False
+                                   )
+                      ]
+                  SwingRight
+                      ->
+                      [ hCenter (str $ show KBindsPage)
+                        <=> center (kBindWid StrafeLeft False False
+                                    <=> kBindWid StrafeRight False False
+                                    <=> kBindWid SwingLeft False False
+                                    <=> kBindWid SwingRight True kBindsAdded'
                                    )
                       ]
           where
@@ -622,7 +644,13 @@ initLocState :: ExtState.State -> [(PlayerSignal, [Binding])] -> LocState
 initLocState extState kBinds' = LocState Nothing kBinds' False 0 extState
 
 defKBinds :: [(PlayerSignal, [Binding])]
-defKBinds = [(StrafeLeft, [bind 'h']), (StrafeRight, [bind 'l'])]
+defKBinds
+   =
+   [ (StrafeLeft, [bind 'h'])
+   , (StrafeRight, [bind 'l'])
+   , (SwingLeft, [bind 'j'])
+   , (SwingRight, [bind 'k'])
+   ]
 
 getKBinds :: IO [(PlayerSignal, [Binding])]
 getKBinds = do

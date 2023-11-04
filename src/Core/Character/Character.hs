@@ -21,6 +21,13 @@ newtype Position = Position {_unPosition :: (RowIndex, ColumnIndex)} deriving Eq
 
 
 data Side = Left' | Right' deriving Eq
+instance Enum Side where
+    fromEnum Left' = -1
+    fromEnum Right' = 1
+
+    toEnum n
+        | n <= -1 = Left'
+        | otherwise = Right'
 
 
 makeFieldsNoPrefix ''Position

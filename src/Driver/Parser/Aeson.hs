@@ -53,6 +53,9 @@ instance Parser Aeson where
                            *> dfltNotSetOpt "rowCrossingScoreBonus"
                                             (options . rowCrossingScoreBonus)
                                             _Integral
+                           *> dfltNotSetOpt "enemyKillingScoreBonus"
+                                            (options . enemyKillingScoreBonus)
+                                            _Integral
             dfltNotSetOpt optName optSetter optType
                 | Just optVal <- conf ^? key optName . optType
                 = optSetter .= optVal

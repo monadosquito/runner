@@ -78,6 +78,12 @@ instance Environment Sys where
                                                 <> short 'r'
                                                 <> value (_rowCrossingScoreBonus opts)
                                                )
+                                    <*> option auto
+                                               (long "enemy-killing-score-bonus"
+                                                <> metavar "NATURAL_NUMBER"
+                                                <> short 'k'
+                                                <> value (_enemyKillingScoreBonus opts)
+                                               )
         argConf <- execParser
                  $ info (readConf defaultConfiguration <**> helper)
                         fullDesc

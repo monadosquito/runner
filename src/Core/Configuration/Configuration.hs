@@ -35,6 +35,7 @@ data Options = Options { _trackWidth :: TrackWidth
                        , _characterProgressSpeed :: Double
                        , _characterHitPoints :: Natural
                        , _rowCrossingScoreBonus :: Natural
+                       , _enemyKillingScoreBonus :: Natural
                        }
 
 
@@ -62,6 +63,7 @@ defaultOptions = Options { _trackWidth = 5
                          , _characterProgressSpeed = 2
                          , _characterHitPoints = 3
                          , _rowCrossingScoreBonus = 1
+                         , _enemyKillingScoreBonus = 10
                          }
 
 fix :: Options -> Options
