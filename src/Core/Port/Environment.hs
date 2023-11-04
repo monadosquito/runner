@@ -10,4 +10,4 @@ import Core.Port.Parser
 
 class Environment e where
     getConfiguration :: Parser p => Proxy e -> Proxy p -> IO Configuration
-    getSignals :: Proxy e -> IO (Maybe Signal)
+    getSignals :: Proxy e -> IO (Maybe PlayerSignal)

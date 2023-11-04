@@ -76,7 +76,7 @@ data GlobState = GlobState { _currTrackCycPiecesCnt
                            }
 
 data LocState = LocState { _actPage :: Maybe Page
-                         , _kBinds :: [(Signal, [Binding])]
+                         , _kBinds :: [(PlayerSignal, [Binding])]
                          , _kBindsAdded :: Bool
                          , _slctMenuItemIx :: Int
                          , _ext :: Parser.ExternalState
@@ -211,7 +211,7 @@ draw = do
                     _
                     _
                     _
-                    (Parser.ExternalState charState@(Char.State hp _)
+                    (Parser.ExternalState (Char.State hp _)
                                           score'
                                           trackState
                     )
@@ -222,7 +222,7 @@ draw = do
                 [ center $ hCenter (str $ "SCORE: " ++ show score')
                            <=> hCenter (str . show
                                             . RndredTrackLines
-                                            $ Char.reflect charState trackPiece
+                                            $ trackPiece
                                        )
                            <=> hCenter (str $ "HP: " ++ show hp)
                 ]
@@ -271,7 +271,7 @@ draw = do
                                  ++ ": "
                                  ++ fromJust (comSepSlctSigKBinds sig)
                                  ++ "   "
-            sig' = toEnum slctMenuItemIx' :: Signal
+            sig' = toEnum slctMenuItemIx' :: PlayerSignal
         f (LocState (Just TrackSlctPage)
            _
            _
@@ -350,30 +350,41 @@ hndlEv globStateRef evChan parser = do
         case ev of
             AppEvent FeedTrackRow -> do
                 prevCharPos <- use (ext . Parser.character . Char.position)
-                trackRows <- use (ext . Parser.track . Track.rows)
-                ext . Parser.character
-                    %= Char.obstruct (progress prevCharPos) trackRows
+                prevCharState <- use (ext . Parser.character)
+                prevTrackState <- use (ext . Parser.track)
+                let sig = FlowSignal Progress
+                    (nextCharState, nextTrackState) = runReader (Char.reflect sig
+                                                                     prevCharState
+                                                                     prevTrackState
+                                                                )
+                                                                conf
+                ext . Parser.character .= nextCharState
+                ext . Parser.track .= nextTrackState
                 charHP <- use (ext . Parser.character . Char.hitPoints)
                 cellAheadChar <- getCellAheadChar
                 nextCharPos <- use (ext . Parser.character . Char.position)
-                let obstAheadChar = cellAheadChar == Just Track.Obstacle
-                    charDead = charHP == 0
-                    charMoved = prevCharPos /= nextCharPos
-                if (obstAheadChar && not charMoved)
-                then liftIO $ do
-                    modifyIORef globStateRef
-                                (& currTrackPieceCharHitsCnt %~ (+ 1))
-                else do
-                    ext . Parser.score %= (+ 1)
-                liftIO $ do
-                    modifyIORef globStateRef
-                                $ (& charStrafed .~ False)
-                                  . (& charStuck .~ obstAheadChar)
-                    when charDead $ do
-                        savExists <- doesFileExist savFileName
-                        when savExists $ removeFile savFileName
-                        writeBChan evChan Fin
-                        writeBChan evChan Start
+                case cellAheadChar of
+                    Just cellAheadChar' -> do
+                        let obstAheadChar = cellAheadChar' == Track.Obstacle
+                            charDead = charHP == 0
+                            charMoved = prevCharPos /= nextCharPos
+                        if (obstAheadChar && not charMoved)
+                        then liftIO $ do
+                            modifyIORef globStateRef
+                                        (& currTrackPieceCharHitsCnt %~ (+ 1))
+                        else do
+                            ext . Parser.score %= (+ 1)
+                        liftIO $ do
+                            modifyIORef globStateRef
+                                        $ (& charStrafed .~ False)
+                                          . (& charStuck .~ obstAheadChar)
+                            when charDead $ do
+                                savExists <- doesFileExist savFileName
+                                when savExists $ removeFile savFileName
+                                writeBChan evChan Fin
+                                writeBChan evChan Start
+                    Nothing -> do
+                        return ()
             AppEvent FeedTrackPiece -> do
                 ext . Parser.track . Track.rows %= drop (trackPieceCap - 1)
                 liftIO $ do
@@ -381,9 +392,21 @@ hndlEv globStateRef evChan parser = do
             AppEvent FeedTrackCyc -> do
                 gen <- newStdGen
                 prevTrackState <- use (ext . Parser.track)
+                charColIx <- fromIntegral
+                          <$> use (ext
+                                   . Parser.character
+                                   . Char.position
+                                   . unPosition
+                                   . _2
+                                  )
                 let initTrackState = prevTrackState
                                    & Track.rows
-                                   %~ (pure . last)
+                                   %~ (pure
+                                       . (& element charColIx
+                                          .~ Track.TrailPart
+                                         )
+                                       . last
+                                      )
                     currTrackCyc = Track.getCycle currTrack
                     contTrackState = interpretFrom' initTrackState
                                                     currTrackCyc
@@ -474,7 +497,7 @@ hndlEv globStateRef evChan parser = do
                            Just KBindsPage -> do
                                kBinds' <- use kBinds
                                slctMenuItemIx' <- use slctMenuItemIx
-                               let sig = toEnum slctMenuItemIx' :: Signal
+                               let sig = toEnum slctMenuItemIx' :: PlayerSignal
                                    kBindIx = List.findIndex ((== sig) . fst)
                                                             kBinds'
                                case kBindIx of
@@ -526,8 +549,10 @@ hndlEv globStateRef evChan parser = do
                        actPage' <- use actPage
                        case actPage' of
                             Just KBindsPage -> do
-                                let sig = toEnum @Signal slctMenuItemIx'
-                                when (sig > minBound) $ slctMenuItemIx %= pred
+                                let playerSig = toEnum @PlayerSignal
+                                                       slctMenuItemIx'
+                                when (playerSig > minBound) $ do
+                                    slctMenuItemIx %= pred
                             Just RacePage -> do
                                 return ()
                             Just TrackSlctPage -> do
@@ -541,7 +566,7 @@ hndlEv globStateRef evChan parser = do
                        actPage' <- use actPage
                        case actPage' of
                             Just KBindsPage -> do
-                                let sig = toEnum @Signal slctMenuItemIx'
+                                let sig = toEnum @PlayerSignal slctMenuItemIx'
                                 when (sig < maxBound) $ do
                                     slctMenuItemIx %= succ
                             Just RacePage -> do
@@ -562,7 +587,7 @@ hndlEv globStateRef evChan parser = do
                        if addKBinds'
                        then do
                            pageItemIx' <- use slctMenuItemIx
-                           let sig = toEnum pageItemIx' :: Signal
+                           let sig = toEnum pageItemIx' :: PlayerSignal
                                kBindIx = List.findIndex ((== sig) . fst)
                                                         kBinds'
                            case kBindIx of
@@ -575,21 +600,19 @@ hndlEv globStateRef evChan parser = do
                                    return ()
                        else case List.findIndex (elem kBind . snd) kBinds' of
                            Just sigIx -> do
-                               let sig = fst $ kBinds' !! sigIx
+                               let playerSig = fst $ kBinds' !! sigIx
+                                   sig = PlayerSignal playerSig
                                GlobState {..} <- liftIO $ readIORef globStateRef
                                when (not _paused) $ do
-                                   trackRows <- use (ext
-                                                     . Parser.track
-                                                     . Track.rows
-                                                    )
-                                   nextCharPos <- (`runReader` conf)
-                                                  . strafe (signalToSide sig)
-                                               <$> use (ext
-                                                        . Parser.character
-                                                        . Char.position
-                                                       )
-                                   ext . Parser.character
-                                       %= Char.obstruct nextCharPos trackRows
+                                   prevCharState <- use (ext . Parser.character)
+                                   prevTrackState <- use (ext . Parser.track)
+                                   let (nextCharState, nextTrackState) = runReader (Char.reflect sig
+                                                                                        prevCharState
+                                                                                        prevTrackState
+                                                                                   )
+                                                                                   conf
+                                   ext . Parser.character .= nextCharState
+                                   ext . Parser.track .= nextTrackState
                                    cellAheadChar <- getCellAheadChar
                                    charHP <- use (ext
                                                   . Parser.character
@@ -617,17 +640,17 @@ hndlEv globStateRef evChan parser = do
 initGlobState :: GlobState
 initGlobState = GlobState 0 0 0 0 0 Nothing Nothing True True False False
 
-initLocState :: Parser.ExternalState -> [(Signal, [Binding])] -> LocState
+initLocState :: Parser.ExternalState -> [(PlayerSignal, [Binding])] -> LocState
 initLocState extState kBinds' = LocState Nothing kBinds' False 0 extState
 
-defKBinds :: [(Signal, [Binding])]
+defKBinds :: [(PlayerSignal, [Binding])]
 defKBinds
    =
    [ (StrafeLeft, [bind 'a', bind Vty.KLeft])
    , (StrafeRight, [bind 'd', bind Vty.KRight])
    ]
 
-getKBinds :: IO [(Signal, [Binding])]
+getKBinds :: IO [(PlayerSignal, [Binding])]
 getKBinds = do
     kBindsExist <- doesFileExist kBindsSavFileName
     if kBindsExist
@@ -639,7 +662,7 @@ getKBinds = do
                                        . readKBinds
     else return defKBinds
   where
-    readKBinds = readEither @[(Signal, Text.Text)]
+    readKBinds = readEither @[(PlayerSignal, Text.Text)]
                >=> (& sequence)
                    . (& each %~ sequence)
                    . (& each . _2

@@ -366,7 +366,9 @@ selectNextTrailPartColumns :: State.StateT GenerationState
                                            (Reader Configuration)
                                            [ColumnIndex]
 selectNextTrailPartColumns = do
-    previouses <- ((fromIntegral <$>) . findIndices (== TrailPart))
+    previouses <- ((fromIntegral <$>)
+                   . findIndices (`elem` [TrailPart, Character])
+                  )
                <$> use (track . rows . _head)
     is <- selectParities previouses
     let theForked = concatMap (\(i, previous)
