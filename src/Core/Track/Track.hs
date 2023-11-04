@@ -55,13 +55,7 @@ newtype Range a = Range (a, a)
 newtype Offset = Offset (ColumnIndex, ColumnIndex)
 
 
-data Cell = Obstacle
-          | TrailPart
-          | Pass
-          | Character
-          | IceTroll
-          | TreasureChest
-          deriving Eq
+data Cell = Obstacle | TrailPart | Pass | Character deriving Eq
 
 data GenerationState = GenerationState { _generator :: StdGen
                                        , _eitherSequences :: [Track]

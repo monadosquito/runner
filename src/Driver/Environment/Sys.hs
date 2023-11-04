@@ -17,9 +17,6 @@ import Control.Lens
 import Core.Script.Track
 
 import Core.Port.Parser
-import Core.Signal.Signal
-
-import System.IO
 
 
 data Sys
@@ -88,38 +85,3 @@ instance Environment Sys where
                   . const
                   $ pure defaultConfiguration
         execParser $ info (readConf fileConf <**> helper) fullDesc
-    getSignals _ = do
-        key <- getArrK
-        return $ if | key == Right 'q' -> Nothing
-                    | key `elem` [Left (Just LeftArrK), Right 'a']
-                    -> Just StrafeLeft
-                    | key `elem` [Left (Just RightArrK), Right 'd']
-                    -> Just StrafeRight
-                    | otherwise -> Nothing
-
-data ArrK = LeftArrK | RightArrK | UpArrK | DownArrK deriving Eq
-
-
-getArrK :: IO (Either (Maybe ArrK) Char)
-getArrK = do
-    hSetBuffering stdin NoBuffering
-    hSetEcho stdout False
-    c <- getChar
-    case c of
-        '\ESC' -> Left <$> parseArr
-        char -> return $ Right char
-
-parseArr :: IO (Maybe ArrK)
-parseArr = do
-    char <- getChar
-    case char of
-        '\ESC' -> parseArr
-        '[' -> do
-            ltr <- getChar
-            return $ case ltr of
-                         'A' -> Just UpArrK
-                         'B' -> Just DownArrK
-                         'C' -> Just RightArrK
-                         'D' -> Just LeftArrK
-                         _   -> Nothing
-        _ -> return Nothing
