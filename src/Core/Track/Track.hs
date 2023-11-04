@@ -55,7 +55,7 @@ newtype Range a = Range (a, a)
 newtype Offset = Offset (ColumnIndex, ColumnIndex)
 
 
-data Cell = Obstacle | TrailPart | Pass | Character deriving Eq
+data Cell = Obstacle | TrailPart | Pass | Character | Enemy deriving Eq
 
 data GenerationState = GenerationState { _generator :: StdGen
                                        , _eitherSequences :: [Track]
@@ -65,6 +65,7 @@ data GenerationState = GenerationState { _generator :: StdGen
                                        , _markedSequence :: Maybe MarkedSequence
                                        , _sequenceEndsCount :: Count
                                        , _track :: State
+                                       , _rowWithEnemies :: Bool
                                        }
 
 data Track' next = Condition { _condition :: Condition
@@ -121,13 +122,49 @@ makeFieldsNoPrefix ''State
 
 generateRow :: State.StateT GenerationState (Reader Configuration) ()
 generateRow = do
+    width <- fromIntegral <$> asks (^. options . trackWidth)
+    startPartLength <- fromIntegral <$> asks (^. options . trackStartPartLength)
     trailPartColumnIndices <- selectNextTrailPartColumns
-    row <- trail trailPartColumnIndices
-        <$> (scatter Pass =<< lift generateObstacleRow)
-    forM_ trailPartColumnIndices $ \index' ->
-        track . rows . _head . element (fromIntegral index')
-              .= TrailPart
-    track . rows %= (row :)
+    newRow <- trail trailPartColumnIndices
+           <$> (scatter Pass =<< lift generateObstacleRow)
+    let middleCell = width `div` 2
+        setCell cell index' = track . rows . _head . element index'' .= cell
+          where
+            index'' = fromIntegral index'
+    forM_ trailPartColumnIndices $ setCell TrailPart
+    enemiesCells <- use (track
+                         . rows
+                         . _head
+                         . to (concat
+                               . filter ((>= 3) . length)
+                               . groupBy (\x y -> y == x + 1 || y == x + 2)
+                               . findIndices (== TrailPart)
+                              )
+                        )
+    parityEnemiesCells <- do
+        rowWithEnemies' <- use rowWithEnemies
+        rowWithEnemies %= not
+        if rowWithEnemies'
+        then do
+            parityEnemiesCellsIs <- selectParities enemiesCells
+            let parityEnemiesCells = enemiesCells
+                                   ^.. traversed
+                                   . ifiltered (\i _
+                                                ->
+                                                i `elem` parityEnemiesCellsIs
+                                               )
+            rowsCount <- use (track . rows . to length)
+            return $ if rowsCount `elem` [startPartLength, startPartLength + 1]
+                     then filter (`notElem` [ middleCell - 1
+                                            , middleCell
+                                            , middleCell + 1
+                                            ]
+                                 )
+                                 parityEnemiesCells
+                     else parityEnemiesCells
+        else return []
+    forM_ parityEnemiesCells $ setCell Enemy
+    track . rows %= (newRow :)
 
 generateObstacleRow :: Reader Configuration [Cell]
 generateObstacleRow = do
@@ -388,7 +425,7 @@ staticLengthFinitePart length'
 initialiseGenerationState :: StdGen -> State -> GenerationState
 initialiseGenerationState generator' state
     =
-    GenerationState generator' [] [] (Pure ()) [] Nothing 0 state
+    GenerationState generator' [] [] (Pure ()) [] Nothing 0 state True
 
 generatePassPosition :: State.StateT GenerationState
                                      (Reader Configuration)

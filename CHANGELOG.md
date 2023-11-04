@@ -1,5 +1,9 @@
 # [Unreleased]
 
+## Added
+
+- Enemies are added.
+
 # [1.0.0 - 2023-10-25]
 
 ## Added

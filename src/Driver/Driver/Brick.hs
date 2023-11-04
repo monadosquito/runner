@@ -359,7 +359,7 @@ hndlEv globStateRef evChan parser = do
                 nextCharPos <- use (ext . ExtState.character . Char.position)
                 case cellAheadChar of
                     Just cellAheadChar' -> do
-                        let obstAheadChar = cellAheadChar' == Track.Obstacle
+                        let obstAheadChar = Char.isObstacle cellAheadChar'
                             charDead = charHP == 0
                             charMoved = prevCharPos /= nextCharPos
                         when (obstAheadChar && not charMoved) . liftIO $ do

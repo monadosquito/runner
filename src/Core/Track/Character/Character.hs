@@ -27,8 +27,7 @@ makeFieldsNoPrefix ''State
 obstruct :: Position -> [[Track.Cell]] -> State -> State
 obstruct _ _ state@(State 0 _) = state
 obstruct (Position nextPosition) rows' state
-    | rows' !! rowIndex !! columnIndex == Track.Obstacle
-    = state & hitPoints -~ 1
+    | isObstacle $ rows' !! rowIndex !! columnIndex = state & hitPoints -~ 1
     | otherwise
     = state & position .~ Position nextPosition
   where
@@ -40,3 +39,8 @@ revive = do
     initialPosition <- spawn
     hitPoints' <- asks _characterHitPoints
     return $ State hitPoints' initialPosition
+
+isObstacle :: Track.Cell -> Bool
+isObstacle Track.Enemy = True
+isObstacle Track.Obstacle = True
+isObstacle _ = False
