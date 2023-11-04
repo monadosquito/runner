@@ -40,7 +40,7 @@ obstruct (Position nextPosition) rows' state
 revive :: Reader Options State
 revive = do
     initialPosition <- spawn
-    hitPoints' <- asks (_characterHitPoints)
+    hitPoints' <- asks _characterHitPoints
     return $ State hitPoints' initialPosition
 
 reflect :: Signal
