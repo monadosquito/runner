@@ -583,8 +583,8 @@ hndlEv globStateRef evChan parser = do
                    | otherwise -> do
                        let kBind = binding k mods
                        kBinds' <- use kBinds
-                       addKBinds' <- use kBindsAdded
-                       if addKBinds'
+                       kBindsAdded' <- use kBindsAdded
+                       if kBindsAdded'
                        then do
                            pageItemIx' <- use slctMenuItemIx
                            let sig = toEnum pageItemIx' :: PlayerSignal
@@ -667,7 +667,7 @@ getKBinds = do
                    . (& each %~ sequence)
                    . (& each . _2
                              %~ ((\case
-                                      BindingList bl -> bl
+                                      BindingList kBinds' -> kBinds'
                                       Unbound -> []
                                  ) <$>
                                 )
@@ -675,7 +675,7 @@ getKBinds = do
                      )
 
 kBindsSavFileName :: String
-kBindsSavFileName = ".k-binds.sav"
+kBindsSavFileName = ".curr-k-binds.sav"
 
 getCellAheadChar :: EventM () LocState (Maybe Track.Cell)
 getCellAheadChar = do
@@ -739,4 +739,4 @@ initExtState trackState = do
     return $ Parser.ExternalState (Char.State charHP initCharPos) 0 trackState
 
 savFileName :: String
-savFileName = ".prog.sav"
+savFileName = ".curr-rac-prog.sav"
