@@ -352,16 +352,8 @@ hndlEv globStateRef evChan parser = do
         case ev of
             AppEvent FeedTrackRow -> do
                 prevCharPos <- use (ext . ExtState.character . Char.position)
-                prevCharState <- use (ext . ExtState.character)
-                prevTrackState <- use (ext . ExtState.track)
                 let sig = FlowSignal Progress
-                    (nextCharState, nextTrackState) = runReader (ExtState.reflect sig
-                                                                                  prevCharState
-                                                                                  prevTrackState
-                                                                )
-                                                                conf
-                ext . ExtState.character .= nextCharState
-                ext . ExtState.track .= nextTrackState
+                ext %= (`runReader` conf) . (ExtState.reflect sig)
                 charHP <- use (ext . ExtState.character . Char.hitPoints)
                 cellAheadChar <- getCellAheadChar
                 nextCharPos <- use (ext . ExtState.character . Char.position)
@@ -370,12 +362,9 @@ hndlEv globStateRef evChan parser = do
                         let obstAheadChar = cellAheadChar' == Track.Obstacle
                             charDead = charHP == 0
                             charMoved = prevCharPos /= nextCharPos
-                        if (obstAheadChar && not charMoved)
-                        then liftIO $ do
+                        when (obstAheadChar && not charMoved) . liftIO $ do
                             modifyIORef globStateRef
                                         (& currTrackPieceCharHitsCnt %~ (+ 1))
-                        else do
-                            ext . ExtState.score %= (+ 1)
                         liftIO $ do
                             modifyIORef globStateRef
                                         $ (& charStrafed .~ False)
@@ -606,15 +595,8 @@ hndlEv globStateRef evChan parser = do
                                    sig = PlayerSignal playerSig
                                GlobState {..} <- liftIO $ readIORef globStateRef
                                when (not _paused) $ do
-                                   prevCharState <- use (ext . ExtState.character)
-                                   prevTrackState <- use (ext . ExtState.track)
-                                   let (nextCharState, nextTrackState) = runReader (ExtState.reflect sig
-                                                                                                     prevCharState
-                                                                                                     prevTrackState
-                                                                                   )
-                                                                                   conf
-                                   ext . ExtState.character .= nextCharState
-                                   ext . ExtState.track .= nextTrackState
+                                   ext %= (`runReader` conf)
+                                          . (ExtState.reflect sig)
                                    cellAheadChar <- getCellAheadChar
                                    charHP <- use (ext
                                                   . ExtState.character

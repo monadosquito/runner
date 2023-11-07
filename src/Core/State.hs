@@ -29,16 +29,16 @@ data State = State { _character :: Character.State
 makeFieldsNoPrefix ''State
 
 
-reflect :: Signal
-        -> Character.State
-        -> Track.State
-        -> Reader Configuration (Character.State, Track.State)
-reflect (FlowSignal Progress) previousChararacterState previousTrackState = do
+reflect :: Signal -> State -> Reader Configuration State
+reflect (FlowSignal Progress)
+        (State previousChararacterState previousScore previousTrackState)
+    = do
     let nextCharacterPosition = progress
                               $ Character._position previousChararacterState
         nextCharacterState = Character.obstruct nextCharacterPosition
                                                 (Track._rows previousTrackState)
                                                 previousChararacterState
+        nextScore = previousScore + 1
         (nextRow, nextColumn) = nextCharacterState
                               ^. Character.position
                               . unPosition
@@ -52,13 +52,15 @@ reflect (FlowSignal Progress) previousChararacterState previousTrackState = do
                        . element nextRow
                        . element nextColumn
                        .~ Track.Character
-    return (nextCharacterState, nextTrackState)
+    return $ State nextCharacterState nextScore nextTrackState
   where
     (previousRow, previousColumn) = previousChararacterState
                                   ^. Character.position
                                   . unPosition
                                   . to (bimap fromIntegral fromIntegral)
-reflect (PlayerSignal signal) previousChararacterState previousTrackState = do
+reflect (PlayerSignal signal)
+        (State previousChararacterState previousScore previousTrackState)
+    = do
     let strafeSide = signalToSide signal
     nextCharacterPosition <- strafe strafeSide
                                     $ Character._position previousChararacterState
@@ -78,7 +80,7 @@ reflect (PlayerSignal signal) previousChararacterState previousTrackState = do
                        . element nextRow
                        . element nextColumn
                        .~ Track.Character
-    return (nextCharacterState, nextTrackState)
+    return $ State nextCharacterState previousScore nextTrackState
   where
     (previousRow, previousColumn) = previousChararacterState
                                   ^. Character.position
