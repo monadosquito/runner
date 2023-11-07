@@ -454,170 +454,164 @@ hndlEv globStateRef evChan parser = do
                     when savExists $ removeFile savFileName
             VtyEvent (Vty.EvKey k mods) -> do
                 if | k == (Vty.KChar 'q') -> do
-                       kBinds' <- (& each
-                                   . _2
-                                   %~ Text.intercalate "," . map ppBinding
-                                  )
-                               <$> use kBinds
-                       extState <- use ext
-                       liftIO $ do
-                           GlobState {..} <- readIORef globStateRef
-                           maybe (return ()) killThread _flowThreadId
-                           maybe (return ()) killThread _sessThreadId
-                           kBindsExist <- doesFileExist kBindsSavFileName
-                           when kBindsExist $ removeFile kBindsSavFileName
-                           writeFile kBindsSavFileName $ show kBinds'
-                           let (Position charPos) = extState
-                                                  ^. ExtState.character
-                                                  . Char.position
-                               charRowIx = fromIntegral $ fst charPos
-                               sav = ByteString.unpack
-                                   . serialiseExternalState parser
-                                   $ extState & ExtState.track . Track.rows
-                                                             %~ drop (charRowIx
-                                                                      - 1
-                                                                     )
-                                              & ExtState.character . Char.position
-                                                                 %~ backtrack
+                    kBinds' <- (& each
+                                . _2
+                                %~ Text.intercalate "," . map ppBinding
+                               )
+                            <$> use kBinds
+                    extState <- use ext
+                    liftIO $ do
+                        GlobState {..} <- readIORef globStateRef
+                        maybe (return ()) killThread _flowThreadId
+                        maybe (return ()) killThread _sessThreadId
+                        kBindsExist <- doesFileExist kBindsSavFileName
+                        when kBindsExist $ removeFile kBindsSavFileName
+                        writeFile kBindsSavFileName $ show kBinds'
+                        let (Position charPos) = extState
+                                               ^. ExtState.character
+                                               . Char.position
+                            charRowIx = fromIntegral $ fst charPos
+                            sav = ByteString.unpack
+                                . serialiseExternalState parser
+                                $ extState & ExtState.track . Track.rows
+                                                          %~ drop (charRowIx
+                                                                   - 1
+                                                                  )
+                                           & ExtState.character . Char.position
+                                                              %~ backtrack
 
-                           writeFile savFileName sav
-                       halt
+                        writeFile savFileName sav
+                    halt
                    | k == Vty.KBS -> do
-                       actPage' <- use actPage
-                       case actPage' of
-                           Just KBindsPage -> do
-                               kBinds' <- use kBinds
-                               slctMenuItemIx' <- use slctMenuItemIx
-                               let sig = toEnum slctMenuItemIx' :: PlayerSignal
-                                   kBindIx = List.findIndex ((== sig) . fst)
-                                                            kBinds'
-                               case kBindIx of
-                                   Just kBindIx' -> do
-                                       kBinds . ix kBindIx' . _2 .= []
-                                   Nothing -> do
-                                       return ()
-                           Nothing -> do
-                               kBinds .= defKBinds
-                           _ -> do
-                               return ()
+                    actPage' <- use actPage
+                    case actPage' of
+                        Just KBindsPage -> do
+                            kBinds' <- use kBinds
+                            slctMenuItemIx' <- use slctMenuItemIx
+                            let sig = toEnum slctMenuItemIx' :: PlayerSignal
+                                kBindIx = List.findIndex ((== sig) . fst)
+                                                         kBinds'
+                            case kBindIx of
+                                Just kBindIx' -> do
+                                    kBinds . ix kBindIx' . _2 .= []
+                                Nothing -> do
+                                    return ()
+                        Nothing -> do
+                            kBinds .= defKBinds
+                        _ -> do
+                            return ()
                    | k == Vty.KEnter -> do
-                       actPage' <- use actPage
-                       case actPage' of
-                           Just KBindsPage -> do
-                               kBindsAdded %= not
-                           Nothing -> do
-                               slctPage' <- toEnum <$> use slctMenuItemIx
-                               actPage .= Just slctPage'
-                               when (slctPage' == RacePage) $ do
-                                   liftIO $ do
-                                       modifyIORef globStateRef
-                                                   $ (& paused .~ False)
-                                                     . (& started .~ False)
-                                       writeBChan evChan Start
-                               slctMenuItemIx .= 0
-                           Just TrackSlctPage -> do
-                               trackIx <- use slctMenuItemIx
-                               let trackName' = Map.keys tracks'
-                                              NEList.!! trackIx
-                               ext . ExtState.track . Track.name .= trackName'
-                           _ -> do
-                               return ()
+                    actPage' <- use actPage
+                    case actPage' of
+                        Just KBindsPage -> do
+                            kBindsAdded %= not
+                        Nothing -> do
+                            slctPage' <- toEnum <$> use slctMenuItemIx
+                            actPage .= Just slctPage'
+                            when (slctPage' == RacePage) $ do
+                                liftIO $ do
+                                    modifyIORef globStateRef
+                                                $ (& paused .~ False)
+                                                  . (& started .~ False)
+                                    writeBChan evChan Start
+                            slctMenuItemIx .= 0
+                        Just TrackSlctPage -> do
+                            trackIx <- use slctMenuItemIx
+                            let trackName' = Map.keys tracks' NEList.!! trackIx
+                            ext . ExtState.track . Track.name .= trackName'
+                        _ -> do
+                            return ()
                    | k == Vty.KEsc -> do
-                       actPage' <- use actPage
-                       if actPage' == Nothing
-                       then do
-                           slctPage' <- toEnum <$> use slctMenuItemIx
-                           actPage .= Just slctPage'
-                       else do
-                           actPage .= Nothing
-                       slctPage' <- toEnum <$> use slctMenuItemIx
-                       when (slctPage' == RacePage) . liftIO $ do
-                           modifyIORef globStateRef
-                                       $ (& paused .~ False)
-                                         . (started .~ False)
+                    actPage' <- use actPage
+                    if actPage' == Nothing
+                    then do
+                        slctPage' <- toEnum <$> use slctMenuItemIx
+                        actPage .= Just slctPage'
+                    else do
+                        actPage .= Nothing
+                    slctPage' <- toEnum <$> use slctMenuItemIx
+                    when (slctPage' == RacePage) . liftIO $ do
+                        modifyIORef globStateRef
+                                    $ (& paused .~ False) . (started .~ False)
                    | k `elem` [Vty.KChar 'w', Vty.KUp] -> do
-                       slctMenuItemIx' <- use slctMenuItemIx
-                       actPage' <- use actPage
-                       case actPage' of
-                            Just KBindsPage -> do
-                                let playerSig = toEnum @PlayerSignal
-                                                       slctMenuItemIx'
-                                when (playerSig > minBound) $ do
-                                    slctMenuItemIx %= pred
-                            Just RacePage -> do
-                                return ()
-                            Just TrackSlctPage -> do
-                                when (slctMenuItemIx' > 0) $ do
-                                    slctMenuItemIx %= pred
-                            Nothing -> do
-                                let page = toEnum @Page slctMenuItemIx'
-                                when (page > minBound) $ slctMenuItemIx %= pred
+                    slctMenuItemIx' <- use slctMenuItemIx
+                    actPage' <- use actPage
+                    case actPage' of
+                         Just KBindsPage -> do
+                             let playerSig = toEnum @PlayerSignal
+                                                    slctMenuItemIx'
+                             when (playerSig > minBound) $
+                                 slctMenuItemIx %= pred
+                         Just RacePage -> do
+                             return ()
+                         Just TrackSlctPage -> do
+                             when (slctMenuItemIx' > 0) $ slctMenuItemIx %= pred
+                         Nothing -> do
+                             let page = toEnum @Page slctMenuItemIx'
+                             when (page > minBound) $ slctMenuItemIx %= pred
                    | k `elem` [Vty.KChar 's', Vty.KDown] -> do
-                       slctMenuItemIx' <- use slctMenuItemIx
-                       actPage' <- use actPage
-                       case actPage' of
-                            Just KBindsPage -> do
-                                let sig = toEnum @PlayerSignal slctMenuItemIx'
-                                when (sig < maxBound) $ do
-                                    slctMenuItemIx %= succ
-                            Just RacePage -> do
-                                return ()
-                            Just TrackSlctPage -> do
-                                let slctTrack = slctMenuItemIx'
-                                    tracksCnt = length tracks
-                                when (slctTrack < tracksCnt) $ do
-                                    slctMenuItemIx %= succ
-                            Nothing -> do
-                                let page = toEnum @Page slctMenuItemIx'
-                                when (page < maxBound) $ do
-                                    slctMenuItemIx %= succ
+                    slctMenuItemIx' <- use slctMenuItemIx
+                    actPage' <- use actPage
+                    case actPage' of
+                        Just KBindsPage -> do
+                            let sig = toEnum @PlayerSignal slctMenuItemIx'
+                            when (sig < maxBound) $ slctMenuItemIx %= succ
+                        Just RacePage -> do
+                            return ()
+                        Just TrackSlctPage -> do
+                            let slctTrack = slctMenuItemIx'
+                                tracksCnt = length tracks
+                            when (slctTrack < tracksCnt)
+                                $ slctMenuItemIx %= succ
+                        Nothing -> do
+                            let page = toEnum @Page slctMenuItemIx'
+                            when (page < maxBound) $ slctMenuItemIx %= succ
                    | otherwise -> do
-                       let kBind = binding k mods
-                       kBinds' <- use kBinds
-                       kBindsAdded' <- use kBindsAdded
-                       if kBindsAdded'
-                       then do
-                           pageItemIx' <- use slctMenuItemIx
-                           let sig = toEnum pageItemIx' :: PlayerSignal
-                               kBindIx = List.findIndex ((== sig) . fst)
-                                                        kBinds'
-                           case kBindIx of
-                               Just kBindIx' -> do
-                                   kBinds %= (^.. traversed
-                                              . to (& _2 %~ filter (/= kBind))
-                                             )
-                                   kBinds . ix kBindIx' . _2 %= (++ [kBind])
-                               Nothing -> do
-                                   return ()
-                       else case List.findIndex (elem kBind . snd) kBinds' of
-                           Just sigIx -> do
-                               let playerSig = fst $ kBinds' !! sigIx
-                                   sig = PlayerSignal playerSig
-                               GlobState {..} <- liftIO $ readIORef globStateRef
-                               when (not _paused) $ do
-                                   ext %= (`runReader` conf)
-                                          . (ExtState.reflect sig)
-                                   cellAheadChar <- getCellAheadChar
-                                   charHP <- use (ext
-                                                  . ExtState.character
-                                                  . Char.hitPoints
-                                                 )
-                                   liftIO $ do
-                                       let charDead = charHP == 0
-                                           obstAheadChar = cellAheadChar
-                                                           == Just Track.Obstacle
-                                       modifyIORef globStateRef
-                                                   $ (& charStrafed .~ True)
-                                                     . (& charStuck
-                                                        .~ obstAheadChar
-                                                       )
-                                       when charDead $ do
-                                           savExists <- doesFileExist savFileName
-                                           when savExists $ removeFile savFileName
-                                           writeBChan evChan Fin
-                                           writeBChan evChan Start
-                           Nothing -> do
-                               return ()
+                    let kBind = binding k mods
+                    kBinds' <- use kBinds
+                    kBindsAdded' <- use kBindsAdded
+                    if kBindsAdded'
+                    then do
+                        pageItemIx' <- use slctMenuItemIx
+                        let sig = toEnum pageItemIx' :: PlayerSignal
+                            kBindIx = List.findIndex ((== sig) . fst) kBinds'
+                        case kBindIx of
+                            Just kBindIx' -> do
+                                kBinds %= (^.. traversed
+                                           . to (& _2 %~ filter (/= kBind))
+                                          )
+                                kBinds . ix kBindIx' . _2 %= (++ [kBind])
+                            Nothing -> do
+                                return ()
+                    else case List.findIndex (elem kBind . snd) kBinds' of
+                        Just sigIx -> do
+                            let playerSig = fst $ kBinds' !! sigIx
+                                sig = PlayerSignal playerSig
+                            GlobState {..} <- liftIO $ readIORef globStateRef
+                            when (not _paused) $ do
+                                ext %= (`runReader` conf)
+                                       . (ExtState.reflect sig)
+                                cellAheadChar <- getCellAheadChar
+                                charHP <- use (ext
+                                               . ExtState.character
+                                               . Char.hitPoints
+                                              )
+                                liftIO $ do
+                                    let charDead = charHP == 0
+                                        obstAheadChar = cellAheadChar
+                                                        == Just Track.Obstacle
+                                    modifyIORef globStateRef
+                                                $ (& charStrafed .~ True)
+                                                  . (& charStuck
+                                                     .~ obstAheadChar
+                                                    )
+                                    when charDead $ do
+                                        savExists <- doesFileExist savFileName
+                                        when savExists $ removeFile savFileName
+                                        writeBChan evChan Fin
+                                        writeBChan evChan Start
+                        Nothing -> do
+                            return ()
             _ -> do
                  return ()
 
