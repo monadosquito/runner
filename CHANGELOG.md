@@ -1,7 +1,10 @@
 # [Unreleased]
 
+# [1.1.0 - 2023-11-10]
+
 ## Added
 
+- Extreme menu items can be jumped over.
 - Enemies can be killed.
 - Enemies are added.
 

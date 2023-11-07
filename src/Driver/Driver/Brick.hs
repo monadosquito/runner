@@ -559,35 +559,47 @@ hndlEv globStateRef evChan parser = do
                     slctMenuItemIx' <- use slctMenuItemIx
                     actPage' <- use actPage
                     case actPage' of
-                         Just KBindsPage -> do
-                             let playerSig = toEnum @PlayerSignal
-                                                    slctMenuItemIx'
-                             when (playerSig > minBound) $
-                                 slctMenuItemIx %= pred
-                         Just RacePage -> do
-                             return ()
-                         Just TrackSlctPage -> do
-                             when (slctMenuItemIx' > 0) $ slctMenuItemIx %= pred
-                         Nothing -> do
-                             let page = toEnum @Page slctMenuItemIx'
-                             when (page > minBound) $ slctMenuItemIx %= pred
+                        Just KBindsPage -> do
+                            let playerSig = toEnum @PlayerSignal slctMenuItemIx'
+                            if (playerSig > minBound)
+                            then slctMenuItemIx %= pred
+                            else slctMenuItemIx .= fromEnum (maxBound @PlayerSignal)
+                        Just RacePage -> do
+                            return ()
+                        Just TrackSlctPage -> do
+                            if (slctMenuItemIx' > 0)
+                            then do
+                               slctMenuItemIx %= pred
+                            else do
+                               let tracksCnt = length tracks
+                               slctMenuItemIx .= tracksCnt
+                        Nothing -> do
+                            let page = toEnum @Page slctMenuItemIx'
+                            if (page > minBound)
+                            then slctMenuItemIx %= pred
+                            else slctMenuItemIx .= fromEnum (maxBound @Page)
                    | k `elem` [Vty.KChar 's', Vty.KDown] -> do
                     slctMenuItemIx' <- use slctMenuItemIx
                     actPage' <- use actPage
                     case actPage' of
                         Just KBindsPage -> do
                             let sig = toEnum @PlayerSignal slctMenuItemIx'
-                            when (sig < maxBound) $ slctMenuItemIx %= succ
+                            if (sig < maxBound)
+                            then slctMenuItemIx %= succ
+                            else slctMenuItemIx .= 0
                         Just RacePage -> do
                             return ()
                         Just TrackSlctPage -> do
                             let slctTrack = slctMenuItemIx'
                                 tracksCnt = length tracks
-                            when (slctTrack < tracksCnt)
-                                $ slctMenuItemIx %= succ
+                            if (slctTrack < tracksCnt)
+                            then slctMenuItemIx %= succ
+                            else slctMenuItemIx .= 0
                         Nothing -> do
                             let page = toEnum @Page slctMenuItemIx'
-                            when (page < maxBound) $ slctMenuItemIx %= succ
+                            if (page < maxBound)
+                            then slctMenuItemIx %= succ
+                            else slctMenuItemIx .= 0
                    | otherwise -> do
                     let kBind = binding k mods
                     kBinds' <- use kBinds

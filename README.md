@@ -33,6 +33,9 @@
 - To restart a racing,
     1. Return to the `Main` menu.
     2. Select the `Start` menu item.
+- Whenever an exreme menu item is navigated to and there is an attempt to
+  navigate to its more extreme neighbour item, the opposite extreme item is
+  navigated to.
 
 # Key Bindings
 
