@@ -521,11 +521,39 @@ hndlEv globStateRef evChan parser = do
                                        $ (& paused .~ False)
                                          . (started .~ False)
                    | k `elem` [Vty.KChar 'w', Vty.KUp] -> do
-                       slctPage' :: Page <- toEnum <$> use slctMenuItemIx
-                       when (slctPage' > minBound) $ slctMenuItemIx %= pred
+                       slctMenuItemIx' <- use slctMenuItemIx
+                       actPage' <- use actPage
+                       case actPage' of
+                            Just KBindsPage -> do
+                                let sig = toEnum @Signal slctMenuItemIx'
+                                when (sig > minBound) $ slctMenuItemIx %= pred
+                            Just RacePage -> do
+                                return ()
+                            Just TrackSlctPage -> do
+                                when (slctMenuItemIx' > 0) $ do
+                                    slctMenuItemIx %= pred
+                            Nothing -> do
+                                let page = toEnum @Page slctMenuItemIx'
+                                when (page > minBound) $ slctMenuItemIx %= pred
                    | k `elem` [Vty.KChar 's', Vty.KDown] -> do
-                       slctPage' :: Page <- toEnum <$> use slctMenuItemIx
-                       when (slctPage' < maxBound) $ slctMenuItemIx %= succ
+                       slctMenuItemIx' <- use slctMenuItemIx
+                       actPage' <- use actPage
+                       case actPage' of
+                            Just KBindsPage -> do
+                                let sig = toEnum @Signal slctMenuItemIx'
+                                when (sig < maxBound) $ do
+                                    slctMenuItemIx %= succ
+                            Just RacePage -> do
+                                return ()
+                            Just TrackSlctPage -> do
+                                let slctTrack = slctMenuItemIx'
+                                    tracksCnt = length tracks
+                                when (slctTrack < tracksCnt) $ do
+                                    slctMenuItemIx %= succ
+                            Nothing -> do
+                                let page = toEnum @Page slctMenuItemIx'
+                                when (page < maxBound) $ do
+                                    slctMenuItemIx %= succ
                    | otherwise -> do
                        let kBind = binding k mods
                        kBinds' <- use kBinds
