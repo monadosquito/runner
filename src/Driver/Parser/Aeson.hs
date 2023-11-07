@@ -22,6 +22,8 @@ import qualified Core.Track.Track as Track
 import qualified Data.Aeson as Aeson
 import qualified GHC.Generics as Gen
 
+import Core.State
+
 
 data Aeson
 instance Parser Aeson where
@@ -57,21 +59,21 @@ instance Parser Aeson where
     deserialiseExternalState _ = Aeson.decode
 
 instance Aeson.FromJSON Character.State where
-instance Aeson.FromJSON ExternalState where
+instance Aeson.FromJSON State where
 instance Aeson.FromJSON Position where
 instance Aeson.FromJSON Track.Cell where
 instance Aeson.FromJSON Track.Difficulty where
 instance Aeson.FromJSON Track.Slope where
 instance Aeson.FromJSON Track.State where
 instance Aeson.ToJSON Character.State where
-instance Aeson.ToJSON ExternalState where
+instance Aeson.ToJSON State where
 instance Aeson.ToJSON Position where
 instance Aeson.ToJSON Track.Cell where
 instance Aeson.ToJSON Track.Difficulty where
 instance Aeson.ToJSON Track.Slope where
 instance Aeson.ToJSON Track.State where
 deriving instance Gen.Generic Character.State
-deriving instance Gen.Generic ExternalState
+deriving instance Gen.Generic State
 deriving instance Gen.Generic Position
 deriving instance Gen.Generic Track.Cell
 deriving instance Gen.Generic Track.Difficulty

@@ -15,8 +15,6 @@ import Core.Configuration.Configuration
 import Control.Monad.Reader
 import Numeric.Natural
 
-import Core.Signal.Signal
-
 
 data State = State { _hitPoints :: Natural
                    , _position :: Position
@@ -42,59 +40,3 @@ revive = do
     initialPosition <- spawn
     hitPoints' <- asks _characterHitPoints
     return $ State hitPoints' initialPosition
-
-reflect :: Signal
-        -> State
-        -> Track.State
-        -> Reader Configuration (State, Track.State)
-reflect (FlowSignal Progress) previousChararacterState previousTrackState = do
-    let nextCharacterPosition = progress
-                              $ _position previousChararacterState
-        nextCharacterState = obstruct nextCharacterPosition
-                                      (Track._rows previousTrackState)
-                                      previousChararacterState
-        (nextRow, nextColumn) = nextCharacterState
-                              ^. position
-                              . unPosition
-                              . to (bimap fromIntegral fromIntegral)
-        nextTrackState = previousTrackState
-                       & Track.rows
-                       . element previousRow
-                       . element previousColumn
-                       .~ Track.TrailPart
-                       & Track.rows
-                       . element nextRow
-                       . element nextColumn
-                       .~ Track.Character
-    return (nextCharacterState, nextTrackState)
-  where
-    (previousRow, previousColumn) = previousChararacterState
-                                  ^. position
-                                  . unPosition
-                                  . to (bimap fromIntegral fromIntegral)
-reflect (PlayerSignal signal) previousChararacterState previousTrackState = do
-    let strafeSide = signalToSide signal
-    nextCharacterPosition <- strafe strafeSide
-                                    $ _position previousChararacterState
-    let nextCharacterState = obstruct nextCharacterPosition
-                                      (Track._rows previousTrackState)
-                                      previousChararacterState
-        (nextRow, nextColumn) = nextCharacterState
-                              ^. position
-                              . unPosition
-                              . to (bimap fromIntegral fromIntegral)
-        nextTrackState = previousTrackState
-                       & Track.rows
-                       . element previousRow
-                       . element previousColumn
-                       .~ Track.TrailPart
-                       & Track.rows
-                       . element nextRow
-                       . element nextColumn
-                       .~ Track.Character
-    return (nextCharacterState, nextTrackState)
-  where
-    (previousRow, previousColumn) = previousChararacterState
-                                  ^. position
-                                  . unPosition
-                                  . to (bimap fromIntegral fromIntegral)
