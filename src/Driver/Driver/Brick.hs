@@ -50,6 +50,7 @@ import qualified Core.Port.Parser as Parser
 import Data.Proxy
 import qualified Data.ByteString.Lazy.Char8 as ByteString
 import qualified Data.List.NonEmpty as NEList
+import Text.Read
 
 
 data Page = RacePage
@@ -631,22 +632,24 @@ getKBinds = do
     kBindsExist <- doesFileExist kBindsSavFileName
     if kBindsExist
     then do
-        kBinds' <- (& sequence)
+        readFile kBindsSavFileName <&> (\case
+                                            Right kBinds' -> kBinds'
+                                            Left _ -> defKBinds
+                                       )
+                                       . readKBinds
+    else return defKBinds
+  where
+    readKBinds = readEither @[(Signal, Text.Text)]
+               >=> (& sequence)
                    . (& each %~ sequence)
                    . (& each . _2
-                               %~ ((\case
-                                        BindingList bl -> bl
-                                        Unbound -> []
-                                   ) <$>
-                                  )
-                                  . parseBindingList
+                             %~ ((\case
+                                      BindingList bl -> bl
+                                      Unbound -> []
+                                 ) <$>
+                                )
+                                . parseBindingList
                      )
-                   . read @[(Signal, Text.Text)]
-                <$> readFile kBindsSavFileName
-        return $ case kBinds' of
-                     Right kBinds'' -> kBinds''
-                     Left _ -> defKBinds
-    else return defKBinds
 
 kBindsSavFileName :: String
 kBindsSavFileName = ".k-binds.sav"
