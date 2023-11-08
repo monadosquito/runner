@@ -232,8 +232,8 @@ character action key bindings
 
 |Character action|Default key bindings    |
 |----------------|------------------------|
-|to strafe left  |the left key, the a key |
-|to strafe right |the right key, the d key|
+|to strafe left  |the h key               |
+|to strafe right |the l key               |
 
 # Table 5
 

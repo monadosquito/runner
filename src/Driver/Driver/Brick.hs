@@ -622,11 +622,7 @@ initLocState :: ExtState.State -> [(PlayerSignal, [Binding])] -> LocState
 initLocState extState kBinds' = LocState Nothing kBinds' False 0 extState
 
 defKBinds :: [(PlayerSignal, [Binding])]
-defKBinds
-   =
-   [ (StrafeLeft, [bind 'a', bind Vty.KLeft])
-   , (StrafeRight, [bind 'd', bind Vty.KRight])
-   ]
+defKBinds = [(StrafeLeft, [bind 'h']), (StrafeRight, [bind 'l'])]
 
 getKBinds :: IO [(PlayerSignal, [Binding])]
 getKBinds = do
