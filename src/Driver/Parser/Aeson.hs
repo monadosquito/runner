@@ -50,6 +50,9 @@ instance Parser Aeson where
                            *> dfltNotSetOpt "characterHitPoints"
                                             (options . characterHitPoints)
                                             _Integral
+                           *> dfltNotSetOpt "rowCrossingScoreBonus"
+                                            (options . rowCrossingScoreBonus)
+                                            _Integral
             dfltNotSetOpt optName optSetter optType
                 | Just optVal <- conf ^? key optName . optType
                 = optSetter .= optVal

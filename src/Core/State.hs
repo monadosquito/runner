@@ -33,12 +33,13 @@ reflect :: Signal -> State -> Reader Configuration State
 reflect (FlowSignal Progress)
         (State previousChararacterState previousScore previousTrackState)
     = do
+    rowCrossingScoreBonus' <- asks (^. options . rowCrossingScoreBonus)
     let nextCharacterPosition = progress
                               $ Character._position previousChararacterState
         nextCharacterState = Character.obstruct nextCharacterPosition
                                                 (Track._rows previousTrackState)
                                                 previousChararacterState
-        nextScore = previousScore + 1
+        nextScore = previousScore + rowCrossingScoreBonus'
         (nextRow, nextColumn) = nextCharacterState
                               ^. Character.position
                               . unPosition

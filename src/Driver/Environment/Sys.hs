@@ -72,6 +72,12 @@ instance Environment Sys where
                                                 <> short 'p'
                                                 <> value (_characterHitPoints opts)
                                                )
+                                    <*> option auto
+                                               (long "row-crossing-score-bonus"
+                                                <> metavar "NATURAL_NUMBER"
+                                                <> short 'r'
+                                                <> value (_rowCrossingScoreBonus opts)
+                                               )
         argConf <- execParser
                  $ info (readConf defaultConfiguration <**> helper)
                         fullDesc

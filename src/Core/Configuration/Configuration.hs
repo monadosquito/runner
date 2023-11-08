@@ -34,6 +34,7 @@ data Options = Options { _trackWidth :: TrackWidth
                        , _trackStartPartLength :: Natural
                        , _characterProgressSpeed :: Double
                        , _characterHitPoints :: Natural
+                       , _rowCrossingScoreBonus :: Natural
                        }
 
 
@@ -60,6 +61,7 @@ defaultOptions = Options { _trackWidth = 5
                          , _trackStartPartLength = 3
                          , _characterProgressSpeed = 2
                          , _characterHitPoints = 3
+                         , _rowCrossingScoreBonus = 1
                          }
 
 fix :: Options -> Options

@@ -163,6 +163,13 @@ options
         <td>a configuration file path</td>
     </tr>
     <tr>
+        <td>Row crossing score bonus</td>
+        <td><code>1</code></td>
+        <td><code>--row-crossing-score-bonus</code> (<code>-r</code>)</td>
+        <td><code>rowCrossingScoreBonus</code></td>
+        <td>a score bonus acquired for crossing of one track row</td>
+    </tr>
+    <tr>
         <td>Track difficulty level</td>
         <td><code>2</code></td>
         <td><code>--track-difficulty-level</code> (<code>-d</code>)</td>
