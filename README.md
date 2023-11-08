@@ -7,8 +7,8 @@
 4. Return to the `Main` menu.
 5. Select the `Start` menu item.
 6. Control the character using the [default character action key
-   bindings](#table-4) or [custom ones](#custom-character-key-bindings) to
-   avoid [obstacles](#table-5) and acquire a higher score.
+   bindings](#table-4) or [custom ones](#key-bindings) to avoid
+   [obstacles](#table-5) and acquire a higher score.
 
 ## Notes
 
