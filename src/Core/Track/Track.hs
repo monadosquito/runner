@@ -368,29 +368,12 @@ selectNextTrailPartColumns :: State.StateT GenerationState
 selectNextTrailPartColumns = do
     previouses <- ((fromIntegral <$>) . findIndices (== TrailPart))
                <$> use (track . rows . _head)
-    difficultyLevel' <- asks (^. options . trackDifficultyLevel)
-    previousGenerator <- use generator
-    width <- asks (^. options . trackWidth)
-    let (currentCount, nextGenerator) = randomR (0, maximumCount)
-                                                previousGenerator
-        (parity, newGenerator') = randomR (0, 1) nextGenerator
-        maximumCount = fromIntegral $ width - difficultyLevel'
-    generator .= newGenerator'
-    parityIndices <- replicateM currentCount $ do
-        previousGenerator' <- use generator
-        let (parityIndex, nextGenerator'') = randomR ( 0
-                                                     , length previouses `div` 2
-                                                     )
-                                                     previousGenerator'
-        generator .= nextGenerator''
-        return $ fromIntegral parityIndex
-    let theForked = concatMap (\(previous, index')
+    is <- selectParities previouses
+    let theForked = concatMap (\(i, previous)
                                ->
-                               if index' * 2 - parity `elem` parityIndices
-                               then replicate 2 previous
-                               else [previous]
+                               previous : (previous <$ guard (i `elem` is))
                               )
-                              $ zip previouses [0..length previouses - 1]
+                              $ zip [0..length previouses - 1] previouses
     forM theForked $ \forked -> do
         shiftBoundaries <- lift
                         $ ((& each %~ fromIntegral @Natural @Int) . (^. un_))
@@ -561,3 +544,28 @@ getCycle track' = _cycle' $ runReader initialise defaultConfiguration
                                                                 initialState
          State.execStateT (interpret' track') initialGenerationState
     generator' = mkStdGen 0
+
+selectParities :: [a]
+               -> State.StateT GenerationState (Reader Configuration) [Int]
+selectParities xs = do
+    difficultyLevel' <- asks (^. options . trackDifficultyLevel)
+    previousGenerator <- use generator
+    width <- asks (^. options . trackWidth)
+    let (currentCount, nextGenerator) = randomR ((0, maximumCount)
+                                                 :: (Int, Int)
+                                                )
+                                                previousGenerator
+        (parity, newGenerator') = randomR ((0, 1) :: (Int, Int)) nextGenerator
+        maximumCount = fromIntegral $ width - difficultyLevel'
+    generator .= newGenerator'
+    ns <- replicateM currentCount $ do
+        previousGenerator' <- use generator
+        let (n, nextGenerator'') = randomR ((0, length xs `div` 2)
+                                            :: (Int, Int)
+                                           )
+                                           previousGenerator'
+        generator .= nextGenerator''
+        return n
+    let parityIs = map (subtract parity . (* 2)) ns
+        parities = filter (`elem` parityIs) [0..length xs - 1]
+    return parities
