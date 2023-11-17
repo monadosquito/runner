@@ -1,3 +1,6 @@
+{-# LANGUAGE MultiParamTypeClasses #-}
+
+
 module Core.Port.Driver where
 
 

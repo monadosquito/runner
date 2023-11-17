@@ -1,5 +1,6 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE MultiWayIf #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 
 
 module Driver.Environment.Console where
@@ -19,7 +20,7 @@ import Core.Port.Parser
 
 
 data Console
-instance Environment Console where
+instance Environment Console IO where
     getPreferences _ parser = do
         let readPrefs prefs' = Preferences
                              <$> strOption (completeWith (map fst tracks)

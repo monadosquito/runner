@@ -9,7 +9,7 @@ track1 = do
     repeatedSequenceWhere 5
     middlePredefinedPart TrailPart [[]]
     repeatedSequenceWhere 2
-    middlePredefinedPart TrailPart [obstacle 2 ++ trailPart 3 ++ obstacle 2]
+    middlePredefinedPart TrailPart [obstacle 1 ++ trailPart 1 ++ obstacle 1]
     sequenceEnd
     sequenceEnd
     eitherSequenceWhere
@@ -24,11 +24,11 @@ track1 = do
     withProbability 0.2
     middlePredefinedPart TrailPart [[]]
     sequenceEnd
-    middlePredefinedPart TrailPart [obstacle 3 ++ trailPart 1 ++ obstacle 3]
+    middlePredefinedPart TrailPart [obstacle 1 ++ trailPart 1 ++ obstacle 1]
     repeatedSequenceWhere 4
-    middlePredefinedPart TrailPart [obstacle 1 ++ trailPart 5 ++ obstacle 1]
+    middlePredefinedPart TrailPart [obstacle 1 ++ trailPart 1 ++ obstacle 1]
     sequenceEnd
-    middlePredefinedPart TrailPart [obstacle 3 ++ trailPart 1 ++ obstacle 3]
+    middlePredefinedPart TrailPart [obstacle 1 ++ trailPart 1 ++ obstacle 1]
   where
     obstacle = (`replicate` Obstacle)
     trailPart = (`replicate` TrailPart)

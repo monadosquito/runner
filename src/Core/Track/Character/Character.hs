@@ -18,7 +18,7 @@ import Numeric.Natural
 
 data CharacterState = CharacterState { _hitPoints :: Natural
                                      , _position :: Position
-                                     }
+                                     } deriving Eq
 
 
 makeFieldsNoPrefix ''CharacterState

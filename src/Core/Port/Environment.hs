@@ -1,3 +1,7 @@
+{-# LANGUAGE CPP #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+
+
 module Core.Port.Environment where
 
 
@@ -7,5 +11,5 @@ import Data.Proxy
 import Core.Port.Parser
 
 
-class Environment e where
-    getPreferences :: Parser p => Proxy e -> Proxy p -> IO Preferences
+class Environment e m where
+    getPreferences :: Parser p => Proxy e -> Proxy p -> m Preferences

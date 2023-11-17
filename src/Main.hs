@@ -2,20 +2,20 @@
 
 
 import Core.Port.Driver
-import Core.Port.Environment
 
-import qualified Driver.Driver.Brick as Driver
-import qualified Driver.Environment.Console as Env
+import qualified Driver.Driver.Www.Www as Driver
 import Driver.Parser.Aeson
 
 import Control.Monad.Reader
 import Data.Proxy
 
 import Core.Configuration.Configuration
+import Core.Port.Environment
+import qualified Driver.Environment.Www as Env
 
 
 main :: IO ()
 main = do
-    prefs <- getPreferences (Proxy @Env.Console) $ Proxy @Aeson
+    prefs <- getPreferences (Proxy @Env.Www) $ Proxy @Aeson
     let conf = Configuration prefs defaultOptions 
-    runReaderT (run (Proxy @Driver.Console) $ Proxy @Aeson) conf
+    runReaderT (run (Proxy @Driver.Www) $ Proxy @Aeson) conf

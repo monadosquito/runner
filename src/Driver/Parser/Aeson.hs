@@ -101,3 +101,5 @@ deriving instance Gen.Generic Cell
 deriving instance Gen.Generic Difficulty
 deriving instance Gen.Generic Slope
 deriving instance Gen.Generic TrackState
+instance Aeson.FromJSON Preferences where
+deriving instance Gen.Generic Preferences

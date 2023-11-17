@@ -93,9 +93,9 @@ data Condition = WithDifficultyLevel DifficultyLevel
 
 data Difficulty = Difficulty { _level :: DifficultyLevel
                              , _levelSlope :: Slope
-                             }
+                             } deriving Eq
 
-data Slope = GradualSlope Rise Run | SteepSlope
+data Slope = GradualSlope Rise Run | SteepSlope deriving Eq
 
 data Sequence = EitherSequenceWhere
               | InfiniteTailWhere
@@ -112,7 +112,7 @@ data MarkedSequence = EitherSequence | RepeatedSequence Count
 data TrackState = TrackState { _difficulty :: Difficulty
                              , _rows :: [[Cell]]
                              , _name :: String
-                             }
+                             } deriving Eq
 
 
 makeFieldsNoPrefix ''GenerationState
@@ -474,15 +474,18 @@ scatter cell row = do
     difficultyLevel' <- use $ track . difficulty . level
     width <- asks (^. options . trackWidth)
     let passesCount = fromIntegral @Natural @Int $ width - difficultyLevel'
-    passColumns <- replicateM passesCount generatePassColumn
-    return $ row & traversed
-                 . withIndex
-                 . filteredBy (_1
-                               . to ((`find` passColumns) . (==) . fromIntegral)
-                               . _Just
-                              )
-                 <. _2
-                 .~ cell
+    passColumns <- replicateM passesCount
+                              $ fromIntegral @Natural @Int
+                                <$> generatePassColumn
+    let scatteredRow = zipWith (\i previousCell
+                                ->
+                                if i `elem` passColumns
+                                then cell
+                                else previousCell
+                               )
+                               [0..length row - 1]
+                               row
+    return scatteredRow
 
 withDifficultyLevel :: DifficultyLevel -> Track
 withDifficultyLevel level'
@@ -634,3 +637,16 @@ selectParities xs = do
     let parityIs = map (subtract parity . (* 2)) ns
         parities = filter (`elem` parityIs) [0..length xs - 1]
     return parities
+
+getTailLength :: Track -> Int
+getTailLength track' = runReader initialise defaultConfiguration
+                     ^. track
+                     . rows
+                     . to length
+  where
+    initialise = do
+         initialState <- initialiseTrackState
+         let initialGenerationState = initialiseGenerationState generator'
+                                                                initialState
+         State.execStateT (interpret' track') initialGenerationState
+    generator' = mkStdGen 0

@@ -24,7 +24,7 @@ import Control.Monad.Reader
 data CoreState = CoreState { _character :: CharacterState
                            , _score :: Natural
                            , _track :: TrackState
-                           }
+                           } deriving Eq
 
 
 makeFieldsNoPrefix ''CoreState
@@ -121,3 +121,11 @@ reflect (PlayerSignal signal)
                                   ^. position
                                   . unPosition
                                   . to (bimap fromIntegral fromIntegral)
+
+initialiseCoreState :: Monad m
+                    => TrackState
+                    -> ReaderT Configuration m CoreState
+initialiseCoreState trackState = do
+    characterState <- revive
+    let initialScore = 0
+    return $ CoreState characterState initialScore trackState

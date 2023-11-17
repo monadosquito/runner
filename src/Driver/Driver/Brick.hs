@@ -7,11 +7,12 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE CPP #-}
 
 
 module Driver.Driver.Brick where
 
-
+#ifndef __GHCJS__
 import Core.Character.Character
 import Core.Configuration.Configuration
 import Core.Port.Driver
@@ -26,7 +27,6 @@ import Brick.BChan
 import Brick.Widgets.Center
 import Control.Concurrent
 import Control.Lens
-import Control.Lens.Extras
 import Control.Monad
 import Control.Monad.Free
 import Control.Monad.Reader
@@ -42,17 +42,21 @@ import Core.Script.Track
 import Brick.Keybindings
 import System.Directory
 import qualified Data.List as List
-import qualified Data.Map.NonEmpty as Map
+import qualified Data.Map as Map
 import qualified Data.Text as Text
 
 import Core.Port.Parser
 
 import Data.Proxy
 import qualified Data.ByteString.Lazy.Char8 as ByteString
-import qualified Data.List.NonEmpty as NEList
-import Text.Read
+import qualified Data.List as NEList
+import Text.Read hiding (lift)
 
 import Core.Core
+import Core.Flow.Flow
+import Core.Script.Flow.Flow1
+
+import Numeric.Natural
 
 
 data Page = RacePage
@@ -64,19 +68,6 @@ instance Show Page where
     show TrackSlctPage = "Track Select"
     show KBindsPage = "Key Bindings"
 
-data GlobState = GlobState { _currTrackCycPiecesCnt
-                           , _currTrackCycRemRowsCnt
-                           , _currTrackPiecesCnt
-                           , _currTrackRemRowsCnt
-                           , _currTrackPieceCharHitsCnt :: Int
-                           , _flowThreadId
-                           , _sessThreadId :: Maybe ThreadId
-                           , _paused
-                           , _started
-                           , _charStrafed
-                           , _charStuck :: Bool
-                           }
-
 data LocState = LocState { _actPage :: Maybe Page
                          , _kBinds :: [(PlayerSignal, [Binding])]
                          , _kBindsAdded :: Bool
@@ -86,7 +77,6 @@ data LocState = LocState { _actPage :: Maybe Page
 
 
 makeFieldsNoPrefix ''LocState
-makeFieldsNoPrefix ''GlobState
 
 
 data Console
@@ -94,108 +84,34 @@ instance Driver Console where
     run _ parser = do
         currTrackName <- asks (^. preferences . trackName)
         conf <- ask
-        trackPieceCap <- asks (^. preferences
-                               . trackPieceCapacity
-                               . to fromIntegral
-                              )
-        charProgS <- asks (^. options . characterProgressSpeed)
+        initGlobState <- initialiseFlowState
         (currTrackState, evChan, globStateRef) <- liftIO $ do
             gen <- newStdGen
             let currTrack = tracks' Map.! currTrackName
-                currTrackCyc = getCycle currTrack
-                currTrackInf = is _Free currTrackCyc
                 interpret'' = configure conf
                 currTrackState = interpret'' currTrack gen
-                trackRowTime = round $ 1 / charProgS * 1000000
             evChan <- newBChan 10
             globStateRef <- newIORef initGlobState
-            let feedTrackRow = do
-                    GlobState {..} <- readIORef globStateRef
-                    threadDelay trackRowTime
-                    let freezed = _paused || _charStuck
-                    if not freezed
-                    then writeBChan evChan FeedTrackRow
-                    else feedTrackRow
-                feedHitTrackRows = do
-                    GlobState {..} <- readIORef globStateRef
-                    when (_currTrackPieceCharHitsCnt > 0) $ do
-                        modifyIORef globStateRef
-                                    (& currTrackPieceCharHitsCnt .~ 0)
-                        replicateM_ _currTrackPieceCharHitsCnt feedTrackRow
-                        feedHitTrackRows
-                feedTrackRows initTrackRowsCnt = do
-                    modifyIORef globStateRef
-                                (& currTrackPieceCharHitsCnt
-                                 .~ initTrackRowsCnt
-                                )
-                    feedHitTrackRows
-                start = do
-                    GlobState {..} <- readIORef globStateRef
-                    replicateM_ _currTrackPiecesCnt $ do
-                        feedTrackRows trackPieceCap
-                        writeBChan evChan FeedTrackPiece
-                        writeBChan evChan ReturnChar
-                    feedTrackRows _currTrackRemRowsCnt
-                    threadDelay 100000
-                    if currTrackInf
-                    then forever $ do
-                        writeBChan evChan FeedTrackCyc
-                        writeBChan evChan ReturnChar
-                        threadDelay 100000
-                        GlobState {..} <- readIORef globStateRef
-                        replicateM_ _currTrackCycPiecesCnt $ do
-                            feedTrackRows trackPieceCap
-                            writeBChan evChan FeedTrackPiece
-                            writeBChan evChan ReturnChar
-                        feedTrackRows _currTrackCycRemRowsCnt
-                        threadDelay 100000
-                    else do
-                        modifyIORef globStateRef (& paused .~ True)
-                        writeBChan evChan Fin
-                        writeBChan evChan Start
-            flowThreadId' <- forkIO . forever $ do
-                GlobState {..} <- readIORef globStateRef
-                unless _started $ do
-                    maybe (return ()) killThread _sessThreadId
-                    sessThreadId' <- forkIO start
-                    modifyIORef globStateRef
-                                $ (& started .~ True)
-                                  . (& sessThreadId .~ Just sessThreadId')
-            modifyIORef globStateRef (& flowThreadId .~ Just flowThreadId')
+            let currFlow = runReader flow1 conf
+                dispatch' = writeBChan evChan
+            runFlow globStateRef dispatch' currFlow
             return (currTrackState, evChan, globStateRef)
-        app' <- app globStateRef evChan parser
+        app' <- app globStateRef parser
         kBinds' <- liftIO getKBinds
         coreState <- getCoreState parser currTrackState
         let bldVty = Vty.mkVty Vty.defaultConfig
-            currTrackRowsCnt = coreState ^. track . rows . to length
-            currTrackPiecesCnt' = currTrackRowsCnt `div` trackPieceCap
-            currTrackRemRowsCnt' = currTrackRowsCnt
-                                 `mod` trackPieceCap
-                                 + (currTrackPiecesCnt' - 1)
             initLocState' = initLocState coreState kBinds'
         liftIO $ do
-            modifyIORef globStateRef
-                        $ (& currTrackPiecesCnt .~ currTrackPiecesCnt')
-                          . (& currTrackRemRowsCnt .~ currTrackRemRowsCnt')
             initVty <- bldVty
             void $ customMain initVty bldVty (Just evChan) app' initLocState'
 
-data FlowEvent = FeedTrackRow
-               | FeedTrackPiece
-               | FeedTrackCyc
-               | Fin
-               | ReturnChar
-               | Start
-
-
 app :: Parser p
-    => IORef GlobState
-    -> BChan FlowEvent
+    => IORef FlowState
     -> Proxy p
-    -> ReaderT Configuration IO (App LocState FlowEvent ())
-app globStateRef evChan parser = do
+    -> ReaderT Configuration IO (App LocState Action ())
+app globStateRef parser = do
     draw' <- draw
-    hndlEv' <- hndlEv globStateRef evChan parser
+    hndlEv' <- hndlEv globStateRef parser
     return $ App { appDraw = draw'
                  , appChooseCursor = neverShowCursor
                  , appHandleEvent = hndlEv'
@@ -263,6 +179,9 @@ draw = do
                                     <=> kBindWid SwingRight True kBindsAdded'
                                    )
                       ]
+                  Quit
+                      ->
+                      []
           where
             comSepSlctSigKBinds sig = do
                 unqSlctSigKBinds <- (map ppBinding . List.nub . snd . (kBinds' !!))
@@ -314,7 +233,6 @@ draw = do
                                      -> "  " ++ trackName'
                                  )
                          )
-                       . NEList.toList
                        $ Map.keys tracks'
               ]
         f (LocState Nothing _ _ slctMenuItemIx' _)
@@ -350,13 +268,12 @@ draw = do
     return f
 
 hndlEv :: Parser p
-       => IORef GlobState
-       -> BChan FlowEvent
+       => IORef FlowState
        -> Proxy p
        -> ReaderT Configuration
                   IO
-                  (BrickEvent () FlowEvent -> EventM () LocState ())
-hndlEv globStateRef evChan parser = do
+                  (BrickEvent () Action -> EventM () LocState ())
+hndlEv globStateRef parser = do
     trackPieceCap <- asks (^. preferences
                            . trackPieceCapacity
                            . to fromIntegral
@@ -368,106 +285,102 @@ hndlEv globStateRef evChan parser = do
         currTrackName <- use (core . track . name)
         let currTrack = tracks' Map.! currTrackName
         case ev of
-            AppEvent FeedTrackRow -> do
-                prevCharPos <- use (core . character . position)
+            AppEvent (Signal (FlowSignal Progress)) -> do
+                prevCharRow <- use (core
+                                    . character
+                                    . position
+                                    . unPosition
+                                    . _1
+                                   )
                 let sig = FlowSignal Progress
                 core %= (`runReader` conf) . (reflect sig)
-                charHP <- use (core . character . hitPoints)
-                cellAheadChar <- getCellAheadChar
-                nextCharPos <- use (core . character . position)
-                case cellAheadChar of
-                    Just cellAheadChar' -> do
-                        let obstAheadChar = isObstacle cellAheadChar'
-                            charDead = charHP == 0
-                            charMoved = prevCharPos /= nextCharPos
-                        when (obstAheadChar && not charMoved) . liftIO $ do
-                            modifyIORef globStateRef
-                                        (& currTrackPieceCharHitsCnt %~ (+ 1))
-                        liftIO $ do
-                            modifyIORef globStateRef
-                                        $ (& charStrafed .~ False)
-                                          . (& charStuck .~ obstAheadChar)
-                            when charDead $ do
-                                savExists <- doesFileExist savFileName
-                                when savExists $ removeFile savFileName
-                                writeBChan evChan Fin
-                                writeBChan evChan Start
-                    Nothing -> do
-                        return ()
-            AppEvent FeedTrackPiece -> do
-                core . track . rows %= drop (trackPieceCap - 1)
-                liftIO $ do
-                    modifyIORef globStateRef (& currTrackPieceCharHitsCnt .~ 0)
-            AppEvent FeedTrackCyc -> do
-                gen <- newStdGen
-                prevTrackState <- use (core . track)
-                charColIx <- fromIntegral
-                          <$> use (core
-                                   . character
-                                   . position
-                                   . unPosition
-                                   . _2
-                                  )
-                let initTrackState = prevTrackState
-                                   & rows
-                                   %~ (pure
-                                       . (& element charColIx
-                                          .~ TrailPart
-                                         )
-                                       . last
+                nextCharRow <- use (core
+                                    . character
+                                    . position
+                                    . unPosition
+                                    . _1
+                                   )
+                (charRow, charCol) <- bimap (fromIntegral @Natural @Int)
+                                            (fromIntegral @Natural @Int)
+                                   <$> use (core
+                                            . character
+                                            . position
+                                            . unPosition
+                                           )
+                cellAheadChar <- gets (^? core
+                                       . track
+                                       . rows
+                                       . ix (charRow + 1)
+                                       . ix charCol
                                       )
+                charHP <- use (core . character . hitPoints)
+                let charProgressed = prevCharRow /= nextCharRow
+                    obstAheadChar = isJust $ isObstacle <$> cellAheadChar
+                    charDead = charHP == 0
+                    charHit = not charProgressed && obstAheadChar
+                liftIO $ do
+                    modifyIORef globStateRef (& characterStuck .~ charHit)
+                when charDead $ do
+                    actPage .= Nothing
+                    liftIO $ do
+                        modifyIORef globStateRef $ (& started .~ False)
+                                                   . (& paused .~ False)
+                                                   . (& characterStuck .~ False)
+                        savExists <- doesFileExist savFileName
+                        when savExists $ removeFile savFileName
+                when charHit . liftIO $ do
+                    modifyIORef globStateRef (& characterHitsCount %~ (+ 1))
+            AppEvent FeedNextTrackPiece -> do
+                core . track . rows %= drop (trackPieceCap - 1)
+                core . track
+                     . rows
+                     %= (\(part, rest)
+                         ->
+                         part ++ if null part then [] else [last part] ++ rest
+                        )
+                        . splitAt (trackPieceCap - 1)
+            AppEvent (FeedNextTrackCycle gen) -> do
+                prevTrackState <- use (core . track)
+                let initTrackState = prevTrackState & rows %~ (pure . last)
                     currTrackCyc = getCycle currTrack
                     contTrackState = interpretFrom' initTrackState
                                                     currTrackCyc
                                                     gen
-                    currTrackCycRowsCnt = contTrackState
-                                        ^. rows
-                                        . to length
-                    currTrackCycPiecesCnt' = currTrackCycRowsCnt
-                                           `div` trackPieceCap
-                    currTrackCycRemRowsCnt' = currTrackCycRowsCnt
-                                            `mod` trackPieceCap
-                                            + (currTrackCycPiecesCnt' - 1)
+                                   & rows %~ reverse . init
                 core . track .= contTrackState
-                core . track . rows %= reverse
-                salvageChar
+                core . track
+                     . rows
+                     %= (\(part, rest) -> part ++ [last part] ++ rest)
+                        . splitAt (trackPieceCap - 1)
                 liftIO $ do
                     modifyIORef globStateRef
-                                $ (& currTrackCycPiecesCnt
-                                   .~ currTrackCycPiecesCnt'
-                                  )
-                                  . (& currTrackCycRemRowsCnt
-                                     .~ currTrackCycRemRowsCnt'
-                                    )
-                                  . (charStuck .~ False)
-            AppEvent Fin -> do
-                actPage .= Nothing
-            AppEvent ReturnChar -> do
+                                (& trackRowsCount
+                                 .~ contTrackState
+                                 ^. rows
+                                 . to length
+                                )
+            AppEvent ReturnCharacter -> do
                 core . character . position %= backtrack
-            AppEvent Start -> do
-                gen <- newStdGen
-                let currTrackState = interpret'' currTrack gen
-                    currTrackRowsCnt = currTrackState ^. rows . to length
-                    currTrackPiecesCnt' = currTrackRowsCnt
-                                        `div` trackPieceCap
-                    currTrackRemRowsCnt' = currTrackRowsCnt
-                                         `mod` trackPieceCap
-                                         + (currTrackPiecesCnt' - 1)
-                core . character .= runReader revive conf
-                oldCurrTrackName <- use (core . track . name)
-                core . track .= currTrackState
-                core . track . rows %= reverse
-                core . score .= 0
-                core . track . name .= oldCurrTrackName
+            AppEvent (Refresh gen) -> do
+                let currTrackState = interpret'' currTrack gen & rows %~ reverse
+                    initExtState = runReader (initialiseCoreState currTrackState)
+                                             conf
+                core .= initExtState
+                core . track . name .= currTrackName
+                core . track
+                     . rows
+                     %= (\(part, rest)
+                         ->
+                         part ++ if null part then [] else [last part] ++ rest
+                        )
+                        . splitAt (trackPieceCap - 1)
                 liftIO $ do
                     modifyIORef globStateRef
-                                $ (& charStuck .~ False)
-                                  . (& currTrackPiecesCnt
-                                     .~ currTrackPiecesCnt'
-                                    )
-                                  . (& currTrackRemRowsCnt
-                                     .~ currTrackRemRowsCnt'
-                                    )
+                                (& trackRowsCount
+                                 .~ currTrackState
+                                 ^. rows
+                                 . to length
+                                )
                     savExists <- doesFileExist savFileName
                     when savExists $ removeFile savFileName
             VtyEvent (Vty.EvKey k mods) -> do
@@ -479,9 +392,8 @@ hndlEv globStateRef evChan parser = do
                             <$> use kBinds
                     coreState <- use core
                     liftIO $ do
-                        GlobState {..} <- readIORef globStateRef
-                        maybe (return ()) killThread _flowThreadId
-                        maybe (return ()) killThread _sessThreadId
+                        FlowState {..} <- readIORef globStateRef
+                        maybe (return ()) killThread _sessionThreadId
                         kBindsExist <- doesFileExist kBindsSavFileName
                         when kBindsExist $ removeFile kBindsSavFileName
                         writeFile kBindsSavFileName $ show kBinds'
@@ -529,7 +441,6 @@ hndlEv globStateRef evChan parser = do
                                     modifyIORef globStateRef
                                                 $ (& paused .~ False)
                                                   . (& started .~ False)
-                                    writeBChan evChan Start
                             slctMenuItemIx .= 0
                         Just TrackSlctPage -> do
                             trackIx <- use slctMenuItemIx
@@ -539,16 +450,15 @@ hndlEv globStateRef evChan parser = do
                             return ()
                    | k == Vty.KEsc -> do
                     actPage' <- use actPage
+                    liftIO $ modifyIORef globStateRef (& paused %~ not)
                     if actPage' == Nothing
                     then do
                         slctPage' <- toEnum @Page <$> use slctMenuItemIx
                         actPage .= Just slctPage'
+                        liftIO $ do
+                            modifyIORef globStateRef (& paused .~ False)
                     else do
                         actPage .= Nothing
-                    slctPage' <- toEnum @Page <$> use slctMenuItemIx
-                    when (slctPage' == RacePage) . liftIO $ do
-                        modifyIORef globStateRef
-                                    $ (& paused .~ False) . (started .~ False)
                    | k `elem` [Vty.KChar 'w', Vty.KUp] -> do
                     slctMenuItemIx' <- use slctMenuItemIx
                     actPage' <- use actPage
@@ -621,32 +531,28 @@ hndlEv globStateRef evChan parser = do
                         Just sigIx -> do
                             let playerSig = fst $ kBinds' !! sigIx
                                 sig = PlayerSignal playerSig
-                            GlobState {..} <- liftIO $ readIORef globStateRef
+                            FlowState {..} <- liftIO $ readIORef globStateRef
                             when (not _paused) $ do
                                 core %= (`runReader` conf) . (reflect sig)
                                 cellAheadChar <- getCellAheadChar
                                 charHP <- use (core . character . hitPoints)
-                                liftIO $ do
-                                    let charDead = charHP == 0
-                                        obstAheadChar = cellAheadChar
-                                                        == Just Obstacle
-                                    modifyIORef globStateRef
-                                                $ (& charStrafed .~ True)
-                                                  . (& charStuck
-                                                     .~ obstAheadChar
-                                                    )
-                                    when charDead $ do
+                                let charDead = charHP == 0
+                                when charDead $ do
+                                    actPage .= Nothing
+                                    liftIO $ do
                                         savExists <- doesFileExist savFileName
                                         when savExists $ removeFile savFileName
-                                        writeBChan evChan Fin
-                                        writeBChan evChan Start
+                                liftIO $ do
+                                    let obstAheadChar = cellAheadChar
+                                                      == Just Obstacle
+                                    modifyIORef globStateRef
+                                                (& characterStuck
+                                                 .~ obstAheadChar
+                                                )
                         Nothing -> do
                             return ()
             _ -> do
                  return ()
-
-initGlobState :: GlobState
-initGlobState = GlobState 0 0 0 0 0 Nothing Nothing True True False False
 
 initLocState :: CoreState -> [(PlayerSignal, [Binding])] -> LocState
 initLocState coreState kBinds' = LocState Nothing kBinds' False 0 coreState
@@ -744,3 +650,47 @@ initCoreState trackState = do
 
 savFileName :: String
 savFileName = ".curr-rac-prog.sav"
+
+runFlow :: IORef FlowState -> (Action -> IO ()) -> Flow r n -> IO ()
+runFlow _ _ (Pure _) = pure ()
+runFlow globStateRef sink (Free (Dispatch act next')) = do
+    sink act
+    runFlow globStateRef sink $ next' ()
+runFlow globStateRef sink (Free (Forever flow next')) = do
+    _ <- forever $ runFlow globStateRef sink flow
+    runFlow globStateRef sink $ next' ()
+runFlow globStateRef sink (Free (Fork flow next')) = do
+    threadId <- forkIO $ runFlow globStateRef sink flow
+    runFlow globStateRef sink $ next' threadId
+runFlow globStateRef sink (Free (MakeGenerator next')) = do
+    gen <- newStdGen 
+    runFlow globStateRef sink $ next' gen
+runFlow globStateRef sink (Free (ModifyState f next')) = do
+    modifyIORef globStateRef f
+    runFlow globStateRef sink $ next' ()
+runFlow globStateRef sink (Free (KillThread threadId next')) = do
+    killThread threadId 
+    runFlow globStateRef sink $ next' ()
+runFlow globStateRef sink (Free (ReadState next')) = do
+    globState <- readIORef globStateRef
+    runFlow globStateRef sink $ next' globState
+runFlow globStateRef sink (Free (Replicate n flow next')) = do
+    replicateM_ n (runFlow globStateRef sink flow)
+    runFlow globStateRef sink $ next' ()
+runFlow globStateRef sink (Free (Until suspFlow f flow next')) = do
+    globState <- readIORef globStateRef
+    if not $ f globState
+    then do
+        runFlow globStateRef sink suspFlow
+        runFlow globStateRef sink $ until' suspFlow f flow
+        runFlow globStateRef sink $ next' ()
+    else do
+        runFlow globStateRef sink flow
+        runFlow globStateRef sink $ next' ()
+runFlow globStateRef sink (Free (Wait t next')) = do
+    threadDelay t
+    runFlow globStateRef sink $ next' ()
+runFlow globStateRef sink (Free (WriteState globState next')) = do
+    writeIORef globStateRef globState
+    runFlow globStateRef sink $ next' ()
+#endif

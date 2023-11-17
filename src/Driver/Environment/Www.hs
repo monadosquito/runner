@@ -12,11 +12,14 @@ import Core.Configuration.Configuration
 import Core.Port.Environment
 import Core.Port.Parser
 
+import Driver.Www.Comm
+
 import GHCJS.DOM
 import GHCJS.DOM.Storage
 import GHCJS.DOM.Types
 import GHCJS.DOM.Window
 import qualified Data.ByteString.Lazy.Char8 as BS
+
 
 #ifdef __GHCJS__
 type IO' = IO
@@ -32,5 +35,5 @@ instance Environment Www IO' where
         stor <- getLocalStorage win
         prefs <- maybe defaultPreferences
                        (deserialisePreferences parser . BS.pack)
-              <$> getItem @JSM @String stor ("prefs" :: String)
+              <$> getItem @JSM @String stor prefsStorItemName
         return prefs
