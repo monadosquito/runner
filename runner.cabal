@@ -43,7 +43,7 @@ executable runner
         Core.Script.Track,
         Core.Script.Track.DefaultTrack,
         Core.Script.Track.Track2,
-        Driver.Environment.Sys,
+        Driver.Environment.Console,
         Driver.Parser.Aeson,
         Core.Track.Configuration,
         Core.Track.Configuration.Configuration,
@@ -53,3 +53,4 @@ executable runner
         Core.Track.Character.Character,
         Core.Port.Driver,
         Driver.Driver.Brick,
+        Core.Core,

@@ -6,11 +6,11 @@ import Core.Configuration.Configuration
 import Data.ByteString.Lazy
 import Data.Proxy
 
-import Core.State
+import Core.Core
 
 
 class Parser p where
     deserialiseConfiguration :: Proxy p -> ByteString -> Configuration
-    serialiseExternalState :: Proxy p -> State -> ByteString
-    deserialiseExternalState :: Proxy p -> ByteString -> Maybe State
+    serialiseCoreState :: Proxy p -> CoreState -> ByteString
+    deserialiseCoreState :: Proxy p -> ByteString -> Maybe CoreState
     deserialisePreferences :: Proxy p -> ByteString -> Preferences

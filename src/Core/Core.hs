@@ -4,13 +4,13 @@
 {-# LANGUAGE MultiWayIf #-}
 
 
-module Core.State where
+module Core.Core where
 
 
 import Core.Configuration.Configuration
 
-import qualified Core.Track.Character.Character as Character
-import qualified Core.Track.Track as Track
+import Core.Track.Character.Character
+import Core.Track.Track
 
 import Control.Lens
 import Numeric.Natural
@@ -21,47 +21,47 @@ import Core.Signal.Signal
 import Control.Monad.Reader
 
 
-data State = State { _character :: Character.State
-                   , _score :: Natural
-                   , _track :: Track.State
-                   }
+data CoreState = CoreState { _character :: CharacterState
+                           , _score :: Natural
+                           , _track :: TrackState
+                           }
 
 
-makeFieldsNoPrefix ''State
+makeFieldsNoPrefix ''CoreState
 
 
-reflect :: Signal -> State -> Reader Configuration State
+reflect :: Signal -> CoreState -> Reader Configuration CoreState
 reflect (FlowSignal Progress)
-        (State previousChararacterState previousScore previousTrackState)
+        (CoreState previousChararacterState previousScore previousTrackState)
     = do
     rowCrossingScoreBonus' <- asks (^. options . rowCrossingScoreBonus)
     let nextCharacterPosition = progress
-                              $ Character._position previousChararacterState
-        nextCharacterState = Character.obstruct nextCharacterPosition
-                                                (Track._rows previousTrackState)
-                                                previousChararacterState
+                              $ _position previousChararacterState
+        nextCharacterState = obstruct nextCharacterPosition
+                                      (_rows previousTrackState)
+                                      previousChararacterState
         nextScore = previousScore + rowCrossingScoreBonus'
         (nextRow, nextColumn) = nextCharacterState
-                              ^. Character.position
+                              ^. position
                               . unPosition
                               . to (bimap fromIntegral fromIntegral)
         nextTrackState = previousTrackState
-                       & Track.rows
+                       & rows
                        . element previousRow
                        . element previousColumn
-                       .~ Track.TrailPart
-                       & Track.rows
+                       .~ TrailPart
+                       & rows
                        . element nextRow
                        . element nextColumn
-                       .~ Track.Character
-    return $ State nextCharacterState nextScore nextTrackState
+                       .~ Character
+    return $ CoreState nextCharacterState nextScore nextTrackState
   where
     (previousRow, previousColumn) = previousChararacterState
-                                  ^. Character.position
+                                  ^. position
                                   . unPosition
                                   . to (bimap fromIntegral fromIntegral)
 reflect (PlayerSignal signal)
-        (State previousChararacterState previousScore previousTrackState)
+        (CoreState previousChararacterState previousScore previousTrackState)
     = do
     if | signal `elem` [StrafeLeft, StrafeRight] -> do
         let strafeSide = case signal of
@@ -69,24 +69,24 @@ reflect (PlayerSignal signal)
                              StrafeRight -> Right'
                              _ -> error "undefined side"
         nextCharacterPosition <- strafe strafeSide
-                                        $ Character._position previousChararacterState
-        let nextCharacterState = Character.obstruct nextCharacterPosition
-                                                    (Track._rows previousTrackState)
-                                                    previousChararacterState
+                                        $ _position previousChararacterState
+        let nextCharacterState = obstruct nextCharacterPosition
+                                          (_rows previousTrackState)
+                                          previousChararacterState
             (nextRow, nextColumn) = nextCharacterState
-                                  ^. Character.position
+                                  ^. position
                                   . unPosition
                                   . to (bimap fromIntegral fromIntegral)
             nextTrackState = previousTrackState
-                           & Track.rows
+                           & rows
                            . element previousRow
                            . element previousColumn
-                           .~ Track.TrailPart
-                           & Track.rows
+                           .~ TrailPart
+                           & rows
                            . element nextRow
                            . element nextColumn
-                           .~ Track.Character
-        return $ State nextCharacterState previousScore nextTrackState
+                           .~ Character
+        return $ CoreState nextCharacterState previousScore nextTrackState
        | signal `elem` [SwingLeft, SwingRight] -> do
         enemyKillingScoreBonus' <- asks (^. options . enemyKillingScoreBonus)
         -- let swingSide = fromEnum $ signalToSide signal
@@ -96,26 +96,28 @@ reflect (PlayerSignal signal)
                             _ -> 0
             hitCell = previousColumn + swingSide
             hitObject = previousTrackState
-                        ^? Track.rows
+                        ^? rows
                         . element previousRow
                         . element hitCell
             nextScore = case hitObject of
-                            Just object | object /= Character.kill object
+                            Just object | object /= kill object
                                 ->
                                 previousScore + enemyKillingScoreBonus'
                             _
                                 ->
                                 previousScore
             nextTrackState = previousTrackState
-                           & Track.rows
+                           & rows
                            . element previousRow
                            . element hitCell
-                           %~ Character.kill
-        return $ State previousChararacterState nextScore nextTrackState
+                           %~ kill
+        return $ CoreState previousChararacterState nextScore nextTrackState
        | otherwise -> do
-        return $ State previousChararacterState previousScore previousTrackState
+        return $ CoreState previousChararacterState
+                           previousScore
+                           previousTrackState
   where
     (previousRow, previousColumn) = previousChararacterState
-                                  ^. Character.position
+                                  ^. position
                                   . unPosition
                                   . to (bimap fromIntegral fromIntegral)

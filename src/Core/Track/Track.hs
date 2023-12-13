@@ -65,7 +65,7 @@ data GenerationState = GenerationState { _generator :: StdGen
                                        , _repeatedSequences :: [(Count, Track)]
                                        , _markedSequence :: Maybe MarkedSequence
                                        , _sequenceEndsCount :: Count
-                                       , _track :: State
+                                       , _track :: TrackState
                                        , _rowWithEnemies :: Bool
                                        }
 
@@ -109,16 +109,16 @@ data Part = StaticLengthFinitePart PartLength
 
 data MarkedSequence = EitherSequence | RepeatedSequence Count
 
-data State = State { _difficulty :: Difficulty
-                   , _rows :: [[Cell]]
-                   , _name :: String
-                   }
+data TrackState = TrackState { _difficulty :: Difficulty
+                             , _rows :: [[Cell]]
+                             , _name :: String
+                             }
 
 
 makeFieldsNoPrefix ''GenerationState
 makeFieldsNoPrefix ''Boundaries
 makeFieldsNoPrefix ''Difficulty
-makeFieldsNoPrefix ''State
+makeFieldsNoPrefix ''TrackState
 
 
 generateRow :: State.StateT GenerationState (Reader Configuration) ()
@@ -187,11 +187,11 @@ getShiftBoundaries position = do
              then Boundaries (position - 1, position)
              else Boundaries (position - 1, position + 1)
 
-interpret :: Track -> StdGen -> State
+interpret :: Track -> StdGen -> TrackState
 interpret track' generator' = _track $ runReader initialise defaultConfiguration
   where
     initialise = do
-         initialState <- initialiseState
+         initialState <- initialiseTrackState
          let initialGenerationState = initialiseGenerationState generator'
                                                                 initialState
          State.execStateT (interpret' track') initialGenerationState
@@ -439,25 +439,25 @@ staticLengthFinitePart length'
     =
     Free (Part (StaticLengthFinitePart length') (Pure ()))
 
-initialiseGenerationState :: StdGen -> State -> GenerationState
+initialiseGenerationState :: StdGen -> TrackState -> GenerationState
 initialiseGenerationState generator' state
     =
     GenerationState generator' [] [] (Pure ()) [] Nothing 0 state True
 
-generatePassPosition :: State.StateT GenerationState
-                                     (Reader Configuration)
-                                     ColumnIndex
-generatePassPosition = do
+generatePassColumn :: State.StateT GenerationState
+                                   (Reader Configuration)
+                                   ColumnIndex
+generatePassColumn = do
     previousGenerator <- use generator
     width <- fromIntegral @Natural @Int <$> asks (^. options . trackWidth)
     let firstColumn = 0 :: Int
         lastColumn = width - 1 :: Int
-        (position, nextGenerator) = bimap (fromIntegral @Int @Natural)
-                                          id
-                                          $ randomR (firstColumn, lastColumn)
-                                                    previousGenerator
+        (column, nextGenerator) = bimap (fromIntegral @Int @Natural)
+                                        id
+                                        $ randomR (firstColumn, lastColumn)
+                                                  previousGenerator
     generator .= nextGenerator
-    return position
+    return column
 
 scatter :: Cell
         -> [Cell]
@@ -466,14 +466,11 @@ scatter cell row = do
     difficultyLevel' <- use $ track . difficulty . level
     width <- asks (^. options . trackWidth)
     let passesCount = fromIntegral @Natural @Int $ width - difficultyLevel'
-    passPositions <- replicateM passesCount generatePassPosition
+    passColumns <- replicateM passesCount generatePassColumn
     return $ row & traversed
                  . withIndex
                  . filteredBy (_1
-                               . to ((`find` passPositions)
-                                     . (==)
-                                     . fromIntegral @Int @Natural
-                                    )
+                               . to ((`find` passColumns) . (==) . fromIntegral)
                                . _Just
                               )
                  <. _2
@@ -532,7 +529,7 @@ withGradualDifficultyLevelAmountRiseSlope rise run
 infiniteTailWhere :: Track
 infiniteTailWhere = Free (Sequence InfiniteTailWhere (Pure ()))
 
-interpretFrom :: State -> Track -> StdGen -> State
+interpretFrom :: TrackState -> Track -> StdGen -> TrackState
 interpretFrom state track' generator'
     =
     _track $ runReader initialise defaultConfiguration
@@ -584,21 +581,21 @@ trail = flip
                in row & element index'' .~ TrailPart
               )
 
-initialiseState :: Reader Configuration State
-initialiseState = do
+initialiseTrackState :: Reader Configuration TrackState
+initialiseTrackState = do
     startRow <- generateStartRow
     startPartLength' <- fromIntegral @Natural @Int
                      <$> asks (^. options . trackStartPartLength)
     let startPart = replicate startPartLength' startRow
     difficultyLevel' <- asks (^. options . trackDifficultyLevel)
     name' <- asks (^. preferences . trackName)
-    return $ State (Difficulty difficultyLevel' SteepSlope) startPart name'
+    return $ TrackState (Difficulty difficultyLevel' SteepSlope) startPart name'
 
 getCycle :: Track -> Track
 getCycle track' = _cycle' $ runReader initialise defaultConfiguration
   where
     initialise = do
-         initialState <- initialiseState
+         initialState <- initialiseTrackState
          let initialGenerationState = initialiseGenerationState generator'
                                                                 initialState
          State.execStateT (interpret' track') initialGenerationState

@@ -16,13 +16,13 @@ import Data.Text
 import qualified Control.Monad.State as State
 
 import Core.Character.Character
-import qualified Core.Track.Character.Character as Character
-import qualified Core.Track.Track as Track
+import Core.Track.Character.Character
+import Core.Track.Track
 
 import qualified Data.Aeson as Aeson
 import qualified GHC.Generics as Gen
 
-import Core.State
+import Core.Core
 
 
 data Aeson
@@ -61,8 +61,8 @@ instance Parser Aeson where
                 = optSetter .= optVal
                 | otherwise = return ()
         in State.execState dfltNotSetOpts defaultConfiguration
-    serialiseExternalState _ = Aeson.encode
-    deserialiseExternalState _ = Aeson.decode
+    serialiseCoreState _ = Aeson.encode
+    deserialiseCoreState _ = Aeson.decode
     deserialisePreferences _ conf
         =
         let dfltNotSetOpts = dfltNotSetOpt "configurationFilePath"
@@ -80,24 +80,24 @@ instance Parser Aeson where
                 | otherwise = return ()
         in State.execState dfltNotSetOpts defaultPreferences
 
-instance Aeson.FromJSON Character.State where
-instance Aeson.FromJSON State where
+instance Aeson.FromJSON CharacterState where
+instance Aeson.FromJSON CoreState where
 instance Aeson.FromJSON Position where
-instance Aeson.FromJSON Track.Cell where
-instance Aeson.FromJSON Track.Difficulty where
-instance Aeson.FromJSON Track.Slope where
-instance Aeson.FromJSON Track.State where
-instance Aeson.ToJSON Character.State where
-instance Aeson.ToJSON State where
+instance Aeson.FromJSON Cell where
+instance Aeson.FromJSON Difficulty where
+instance Aeson.FromJSON Slope where
+instance Aeson.FromJSON TrackState where
+instance Aeson.ToJSON CharacterState where
+instance Aeson.ToJSON CoreState where
 instance Aeson.ToJSON Position where
-instance Aeson.ToJSON Track.Cell where
-instance Aeson.ToJSON Track.Difficulty where
-instance Aeson.ToJSON Track.Slope where
-instance Aeson.ToJSON Track.State where
-deriving instance Gen.Generic Character.State
-deriving instance Gen.Generic State
+instance Aeson.ToJSON Cell where
+instance Aeson.ToJSON Difficulty where
+instance Aeson.ToJSON Slope where
+instance Aeson.ToJSON TrackState where
+deriving instance Gen.Generic CharacterState
+deriving instance Gen.Generic CoreState
 deriving instance Gen.Generic Position
-deriving instance Gen.Generic Track.Cell
-deriving instance Gen.Generic Track.Difficulty
-deriving instance Gen.Generic Track.Slope
-deriving instance Gen.Generic Track.State
+deriving instance Gen.Generic Cell
+deriving instance Gen.Generic Difficulty
+deriving instance Gen.Generic Slope
+deriving instance Gen.Generic TrackState

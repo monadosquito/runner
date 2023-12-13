@@ -15,18 +15,18 @@ import qualified Core.Configuration.Configuration as Configuration
 import Control.Lens
 
 
-configure :: Configuration -> Track -> StdGen -> State
+configure :: Configuration -> Track -> StdGen -> TrackState
 configure configuration track' generator'
     =
     _track $ runReader initialise $ configuration & options %~ Configuration.fix
   where
     initialise = do
-        initialState <- initialiseState
+        initialState <- initialiseTrackState
         let initialGenerationState = initialiseGenerationState generator'
                                                                initialState
         State.execStateT (interpret' track') initialGenerationState
 
-configureFrom :: Configuration -> State -> Track -> StdGen -> State
+configureFrom :: Configuration -> TrackState -> Track -> StdGen -> TrackState
 configureFrom configuration
     =
     \initialState track' generator'

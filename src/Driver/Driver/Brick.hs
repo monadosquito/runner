@@ -15,9 +15,9 @@ module Driver.Driver.Brick where
 import Core.Character.Character
 import Core.Configuration.Configuration
 import Core.Port.Driver
-import qualified Core.Track.Character.Character as Char
+import Core.Track.Character.Character
 import Core.Track.Configuration.Configuration
-import qualified Core.Track.Track as Track
+import Core.Track.Track
 
 import Driver.Renderer.Cnsl
 
@@ -52,7 +52,7 @@ import qualified Data.ByteString.Lazy.Char8 as ByteString
 import qualified Data.List.NonEmpty as NEList
 import Text.Read
 
-import qualified Core.State as ExtState
+import Core.Core
 
 
 data Page = RacePage
@@ -81,7 +81,7 @@ data LocState = LocState { _actPage :: Maybe Page
                          , _kBinds :: [(PlayerSignal, [Binding])]
                          , _kBindsAdded :: Bool
                          , _slctMenuItemIx :: Int
-                         , _ext :: ExtState.State
+                         , _core :: CoreState
                          }
 
 
@@ -89,8 +89,8 @@ makeFieldsNoPrefix ''LocState
 makeFieldsNoPrefix ''GlobState
 
 
-data Brick
-instance Driver Brick where
+data Console
+instance Driver Console where
     run _ parser = do
         currTrackName <- asks (^. preferences . trackName)
         conf <- ask
@@ -102,7 +102,7 @@ instance Driver Brick where
         (currTrackState, evChan, globStateRef) <- liftIO $ do
             gen <- newStdGen
             let currTrack = tracks' Map.! currTrackName
-                currTrackCyc = Track.getCycle currTrack
+                currTrackCyc = getCycle currTrack
                 currTrackInf = is _Free currTrackCyc
                 interpret'' = configure conf
                 currTrackState = interpret'' currTrack gen
@@ -165,14 +165,14 @@ instance Driver Brick where
             return (currTrackState, evChan, globStateRef)
         app' <- app globStateRef evChan parser
         kBinds' <- liftIO getKBinds
-        extState <- getExtState parser currTrackState
+        coreState <- getCoreState parser currTrackState
         let bldVty = Vty.mkVty Vty.defaultConfig
-            currTrackRowsCnt = extState ^. ExtState.track . Track.rows . to length
+            currTrackRowsCnt = coreState ^. track . rows . to length
             currTrackPiecesCnt' = currTrackRowsCnt `div` trackPieceCap
             currTrackRemRowsCnt' = currTrackRowsCnt
                                  `mod` trackPieceCap
                                  + (currTrackPiecesCnt' - 1)
-            initLocState' = initLocState extState kBinds'
+            initLocState' = initLocState coreState kBinds'
         liftIO $ do
             modifyIORef globStateRef
                         $ (& currTrackPiecesCnt .~ currTrackPiecesCnt')
@@ -213,13 +213,10 @@ draw = do
                     _
                     _
                     _
-                    (ExtState.State (Char.State hp _)
-                                          score'
-                                          trackState
-                    )
+                    (CoreState (CharacterState hp _) score' trackState)
           )
             =
-            let trackPiece = trackState ^. Track.rows . to (take trackPieceCap)
+            let trackPiece = trackState ^. rows . to (take trackPieceCap)
             in
                 [ center $ hCenter (str $ "SCORE: " ++ show score')
                            <=> hCenter (str . show
@@ -300,18 +297,18 @@ draw = do
            _
            _
            slctMenuItemIx'
-           (ExtState.State _ _ (Track.State _ _ name))
+           (CoreState _ _ (TrackState _ _ name'))
           )
             = [ center . foldl (<=>) emptyWidget
                        . map str
                        . (& imap (\ix' trackName'
                                   ->
                                   if | ix' == slctMenuItemIx'
-                                     && trackName' == name
+                                     && trackName' == name'
                                      -> "* " ++ trackName' ++ " *"
                                      | ix' == slctMenuItemIx'
                                      -> "* " ++ trackName'
-                                     | trackName' == name
+                                     | trackName' == name'
                                      -> "  " ++ trackName' ++ " *"
                                      | otherwise
                                      -> "  " ++ trackName'
@@ -369,19 +366,19 @@ hndlEv globStateRef evChan parser = do
     let interpretFrom' = configureFrom conf
         interpret'' = configure conf
     return $ \ev -> do
-        currTrackName <- use (ext . ExtState.track . Track.name)
+        currTrackName <- use (core . track . name)
         let currTrack = tracks' Map.! currTrackName
         case ev of
             AppEvent FeedTrackRow -> do
-                prevCharPos <- use (ext . ExtState.character . Char.position)
+                prevCharPos <- use (core . character . position)
                 let sig = FlowSignal Progress
-                ext %= (`runReader` conf) . (ExtState.reflect sig)
-                charHP <- use (ext . ExtState.character . Char.hitPoints)
+                core %= (`runReader` conf) . (reflect sig)
+                charHP <- use (core . character . hitPoints)
                 cellAheadChar <- getCellAheadChar
-                nextCharPos <- use (ext . ExtState.character . Char.position)
+                nextCharPos <- use (core . character . position)
                 case cellAheadChar of
                     Just cellAheadChar' -> do
-                        let obstAheadChar = Char.isObstacle cellAheadChar'
+                        let obstAheadChar = isObstacle cellAheadChar'
                             charDead = charHP == 0
                             charMoved = prevCharPos /= nextCharPos
                         when (obstAheadChar && not charMoved) . liftIO $ do
@@ -399,41 +396,41 @@ hndlEv globStateRef evChan parser = do
                     Nothing -> do
                         return ()
             AppEvent FeedTrackPiece -> do
-                ext . ExtState.track . Track.rows %= drop (trackPieceCap - 1)
+                core . track . rows %= drop (trackPieceCap - 1)
                 liftIO $ do
                     modifyIORef globStateRef (& currTrackPieceCharHitsCnt .~ 0)
             AppEvent FeedTrackCyc -> do
                 gen <- newStdGen
-                prevTrackState <- use (ext . ExtState.track)
+                prevTrackState <- use (core . track)
                 charColIx <- fromIntegral
-                          <$> use (ext
-                                   . ExtState.character
-                                   . Char.position
+                          <$> use (core
+                                   . character
+                                   . position
                                    . unPosition
                                    . _2
                                   )
                 let initTrackState = prevTrackState
-                                   & Track.rows
+                                   & rows
                                    %~ (pure
                                        . (& element charColIx
-                                          .~ Track.TrailPart
+                                          .~ TrailPart
                                          )
                                        . last
                                       )
-                    currTrackCyc = Track.getCycle currTrack
+                    currTrackCyc = getCycle currTrack
                     contTrackState = interpretFrom' initTrackState
                                                     currTrackCyc
                                                     gen
                     currTrackCycRowsCnt = contTrackState
-                                        ^. Track.rows
+                                        ^. rows
                                         . to length
                     currTrackCycPiecesCnt' = currTrackCycRowsCnt
                                            `div` trackPieceCap
                     currTrackCycRemRowsCnt' = currTrackCycRowsCnt
                                             `mod` trackPieceCap
                                             + (currTrackCycPiecesCnt' - 1)
-                ext . ExtState.track .= contTrackState
-                ext . ExtState.track . Track.rows %= reverse
+                core . track .= contTrackState
+                core . track . rows %= reverse
                 salvageChar
                 liftIO $ do
                     modifyIORef globStateRef
@@ -447,22 +444,22 @@ hndlEv globStateRef evChan parser = do
             AppEvent Fin -> do
                 actPage .= Nothing
             AppEvent ReturnChar -> do
-                ext . ExtState.character . Char.position %= backtrack
+                core . character . position %= backtrack
             AppEvent Start -> do
                 gen <- newStdGen
                 let currTrackState = interpret'' currTrack gen
-                    currTrackRowsCnt = currTrackState ^. Track.rows . to length
+                    currTrackRowsCnt = currTrackState ^. rows . to length
                     currTrackPiecesCnt' = currTrackRowsCnt
                                         `div` trackPieceCap
                     currTrackRemRowsCnt' = currTrackRowsCnt
                                          `mod` trackPieceCap
                                          + (currTrackPiecesCnt' - 1)
-                ext . ExtState.character .= runReader Char.revive opts
-                oldCurrTrackName <- use (ext . ExtState.track . Track.name)
-                ext . ExtState.track .= currTrackState
-                ext . ExtState.track . Track.rows %= reverse
-                ext . ExtState.score .= 0
-                ext . ExtState.track . Track.name .= oldCurrTrackName
+                core . character .= runReader revive opts
+                oldCurrTrackName <- use (core . track . name)
+                core . track .= currTrackState
+                core . track . rows %= reverse
+                core . score .= 0
+                core . track . name .= oldCurrTrackName
                 liftIO $ do
                     modifyIORef globStateRef
                                 $ (& charStuck .~ False)
@@ -481,7 +478,7 @@ hndlEv globStateRef evChan parser = do
                                 %~ Text.intercalate "," . map ppBinding
                                )
                             <$> use kBinds
-                    extState <- use ext
+                    coreState <- use core
                     liftIO $ do
                         GlobState {..} <- readIORef globStateRef
                         maybe (return ()) killThread _flowThreadId
@@ -489,18 +486,16 @@ hndlEv globStateRef evChan parser = do
                         kBindsExist <- doesFileExist kBindsSavFileName
                         when kBindsExist $ removeFile kBindsSavFileName
                         writeFile kBindsSavFileName $ show kBinds'
-                        let (Position charPos) = extState
-                                               ^. ExtState.character
-                                               . Char.position
+                        let (Position charPos) = coreState
+                                               ^. character
+                                               . position
                             charRowIx = fromIntegral $ fst charPos
                             sav = ByteString.unpack
-                                . serialiseExternalState parser
-                                $ extState & ExtState.track . Track.rows
-                                                          %~ drop (charRowIx
-                                                                   - 1
-                                                                  )
-                                           & ExtState.character . Char.position
-                                                              %~ backtrack
+                                . serialiseCoreState parser
+                                $ coreState & track . rows
+                                                    %~ drop (charRowIx - 1)
+                                            & character . position
+                                                        %~ backtrack
 
                         writeFile savFileName sav
                     halt
@@ -540,7 +535,7 @@ hndlEv globStateRef evChan parser = do
                         Just TrackSlctPage -> do
                             trackIx <- use slctMenuItemIx
                             let trackName' = Map.keys tracks' NEList.!! trackIx
-                            ext . ExtState.track . Track.name .= trackName'
+                            core . track . name .= trackName'
                         _ -> do
                             return ()
                    | k == Vty.KEsc -> do
@@ -629,17 +624,13 @@ hndlEv globStateRef evChan parser = do
                                 sig = PlayerSignal playerSig
                             GlobState {..} <- liftIO $ readIORef globStateRef
                             when (not _paused) $ do
-                                ext %= (`runReader` conf)
-                                       . (ExtState.reflect sig)
+                                core %= (`runReader` conf) . (reflect sig)
                                 cellAheadChar <- getCellAheadChar
-                                charHP <- use (ext
-                                               . ExtState.character
-                                               . Char.hitPoints
-                                              )
+                                charHP <- use (core . character . hitPoints)
                                 liftIO $ do
                                     let charDead = charHP == 0
                                         obstAheadChar = cellAheadChar
-                                                        == Just Track.Obstacle
+                                                        == Just Obstacle
                                     modifyIORef globStateRef
                                                 $ (& charStrafed .~ True)
                                                   . (& charStuck
@@ -658,8 +649,8 @@ hndlEv globStateRef evChan parser = do
 initGlobState :: GlobState
 initGlobState = GlobState 0 0 0 0 0 Nothing Nothing True True False False
 
-initLocState :: ExtState.State -> [(PlayerSignal, [Binding])] -> LocState
-initLocState extState kBinds' = LocState Nothing kBinds' False 0 extState
+initLocState :: CoreState -> [(PlayerSignal, [Binding])] -> LocState
+initLocState coreState kBinds' = LocState Nothing kBinds' False 0 coreState
 
 defKBinds :: [(PlayerSignal, [Binding])]
 defKBinds
@@ -697,28 +688,23 @@ getKBinds = do
 kBindsSavFileName :: String
 kBindsSavFileName = ".curr-k-binds.sav"
 
-getCellAheadChar :: EventM () LocState (Maybe Track.Cell)
+getCellAheadChar :: EventM () LocState (Maybe Cell)
 getCellAheadChar = do
-    charPos <- use (ext . ExtState.character . Char.position)
+    charPos <- use (core . character . position)
     let charRowIx = charPos ^. unPosition . _1 . to fromIntegral
         charColIx = charPos ^. unPosition . _2 . to fromIntegral
-    gets (^? ext
-          . ExtState.track
-          . Track.rows
-          . ix (charRowIx + 1)
-          . ix charColIx
-         )
+    gets (^? core . track . rows . ix (charRowIx + 1) . ix charColIx)
 
 salvageChar :: EventM () LocState ()
 salvageChar = do
-    row <- use (ext . ExtState.track . Track.rows . _head)
-    charColIx <- fromIntegral <$> use (ext
-                                       . ExtState.character
-                                       . Char.position
+    row <- use (core . track . rows . _head)
+    charColIx <- fromIntegral <$> use (core
+                                       . character
+                                       . position
                                        . unPosition
                                        . _2
                                       )
-    let passCellIxs = List.findIndices (== Track.TrailPart) row
+    let passCellIxs = List.findIndices (== TrailPart) row
         nearestPassCellIx = foldr (\passCellIx nearestPassCellIx'
                                    ->
                                    if abs (passCellIx - charColIx)
@@ -728,35 +714,35 @@ salvageChar = do
                                   )
                                   charColIx
                                   passCellIxs
-    ext . ExtState.character
-        . Char.position
-        . unPosition
-        . _2
-        .= fromIntegral nearestPassCellIx
+    core . character
+         . position
+         . unPosition
+         . _2
+         .= fromIntegral nearestPassCellIx
 
-getExtState :: Parser p
-            => Proxy p
-            -> Track.State
-            -> ReaderT Configuration IO ExtState.State
-getExtState prsr trackState = do
-    initExtState' <- initExtState trackState
+getCoreState :: Parser p
+             => Proxy p
+             -> TrackState
+             -> ReaderT Configuration IO CoreState
+getCoreState prsr trackState = do
+    initCoreState' <- initCoreState trackState
     liftIO $ do
         savExists <- doesFileExist savFileName
         if savExists
         then do
             sav <- readFile savFileName
-            case deserialiseExternalState prsr $ ByteString.pack sav of
-                Just savExtState -> return savExtState
-                Nothing -> return initExtState'
+            case deserialiseCoreState prsr $ ByteString.pack sav of
+                Just savCoreState -> return savCoreState
+                Nothing -> return initCoreState'
         else do
-            return initExtState'
+            return initCoreState'
 
-initExtState :: Track.State -> ReaderT Configuration IO ExtState.State
-initExtState trackState = do
+initCoreState :: TrackState -> ReaderT Configuration IO CoreState
+initCoreState trackState = do
     opts <- asks _options
     let initCharPos = runReader spawn opts
     charHP <- asks (^. options . characterHitPoints)
-    return $ ExtState.State (Char.State charHP initCharPos) 0 trackState
+    return $ CoreState (CharacterState charHP initCharPos) 0 trackState
 
 savFileName :: String
 savFileName = ".curr-rac-prog.sav"

@@ -6,7 +6,7 @@ module Core.Track.Character.Character where
 
 
 import Core.Character.Character
-import qualified Core.Track.Track as Track
+import Core.Track.Track
 
 import Control.Lens
 
@@ -16,16 +16,16 @@ import Control.Monad.Reader
 import Numeric.Natural
 
 
-data State = State { _hitPoints :: Natural
-                   , _position :: Position
-                   }
+data CharacterState = CharacterState { _hitPoints :: Natural
+                                     , _position :: Position
+                                     }
 
 
-makeFieldsNoPrefix ''State
+makeFieldsNoPrefix ''CharacterState
 
 
-obstruct :: Position -> [[Track.Cell]] -> State -> State
-obstruct _ _ state@(State 0 _) = state
+obstruct :: Position -> [[Cell]] -> CharacterState -> CharacterState
+obstruct _ _ state@(CharacterState 0 _) = state
 obstruct (Position nextPosition) rows' state
     | isObstacle $ rows' !! rowIndex !! columnIndex = state & hitPoints -~ 1
     | otherwise
@@ -34,17 +34,17 @@ obstruct (Position nextPosition) rows' state
     columnIndex = fromIntegral $ snd nextPosition
     rowIndex = fromIntegral $ fst nextPosition
 
-revive :: Reader Options State
+revive :: Reader Options CharacterState
 revive = do
     initialPosition <- spawn
     hitPoints' <- asks _characterHitPoints
-    return $ State hitPoints' initialPosition
+    return $ CharacterState hitPoints' initialPosition
 
-isObstacle :: Track.Cell -> Bool
-isObstacle Track.LivingEnemy = True
-isObstacle Track.Obstacle = True
+isObstacle :: Cell -> Bool
+isObstacle LivingEnemy = True
+isObstacle Obstacle = True
 isObstacle _ = False
 
-kill :: Track.Cell -> Track.Cell
-kill Track.LivingEnemy = Track.DeadEnemy
+kill :: Cell ->  Cell
+kill LivingEnemy = DeadEnemy
 kill cell = cell

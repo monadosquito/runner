@@ -2,7 +2,7 @@
 {-# LANGUAGE MultiWayIf #-}
 
 
-module Driver.Environment.Sys where
+module Driver.Environment.Console where
 
 
 import Core.Configuration.Configuration
@@ -18,8 +18,8 @@ import Core.Script.Track
 import Core.Port.Parser
 
 
-data Sys
-instance Environment Sys where
+data Console
+instance Environment Console where
     getPreferences _ parser = do
         let readPrefs prefs' = Preferences
                              <$> strOption (completeWith (map fst tracks)
