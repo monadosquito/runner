@@ -221,7 +221,7 @@ draw = do
             =
             let trackPiece = trackState ^. Track.rows . to (take trackPieceCap)
             in
-                [ center $ hCenter (str $ "SP: " ++ show score')
+                [ center $ hCenter (str $ "SCORE: " ++ show score')
                            <=> hCenter (str . show
                                             . RndredTrackLines
                                             $ trackPiece

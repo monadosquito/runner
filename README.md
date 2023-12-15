@@ -27,7 +27,7 @@
 - A currently selected track is marked with the `*` character to the right of
   it.
 - A number after the `HP` label is remaining character hit points.
-- A number after the `SP` label is a current racing score points.
+- A number after the `SCORE` label is a current racing score.
 - To continue a loaded racing progress, toggle the pause mode in the `Main`
   menu.
 - To restart a racing,
