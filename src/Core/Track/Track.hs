@@ -339,7 +339,8 @@ interpret' (Free track') = do
                     let rise' = round
                               $ fromIntegral maximumDifficultyLevel * rise
                     interpret' $ withGradualDifficultyLevelSlope rise' run
-                Sequence InfiniteTailWhere _ -> cycle' .= Free track'
+                Sequence InfiniteTailWhere cycle'' -> do
+                    cycle' .= cycle''
                 Part (MiddlePredefinedPart cell body) _ -> do
                     width <- fromIntegral <$> asks (^. options . trackWidth)
                     when (rectangular body && length (head body) <= width) $ do
@@ -392,7 +393,10 @@ interpret' (Free track') = do
             repeatedSequences . ix lastIndex
                               . _2
                               %= (*> Free (Pure () <$ track'))
-    interpret' $ _next track'
+
+    case track' of
+        Sequence InfiniteTailWhere _ -> return ()
+        _ -> interpret' $ _next track'
 
 selectNextTrailPartColumns :: State.StateT GenerationState
                                            (Reader Configuration)
