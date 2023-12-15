@@ -28,8 +28,7 @@ obstruct :: Position -> [[Cell]] -> CharacterState -> CharacterState
 obstruct _ _ state@(CharacterState 0 _) = state
 obstruct (Position nextPosition) rows' state
     | isObstacle $ rows' !! rowIndex !! columnIndex = state & hitPoints -~ 1
-    | otherwise
-    = state & position .~ Position nextPosition
+    | otherwise = state & position .~ Position nextPosition
   where
     columnIndex = fromIntegral $ snd nextPosition
     rowIndex = fromIntegral $ fst nextPosition

@@ -96,9 +96,9 @@ reflect (PlayerSignal signal)
                             _ -> 0
             hitCell = previousColumn + swingSide
             hitObject = previousTrackState
-                        ^? rows
-                        . element previousRow
-                        . element hitCell
+                      ^? rows
+                      . element previousRow
+                      . element hitCell
             nextScore = case hitObject of
                             Just object | object /= kill object
                                 ->
