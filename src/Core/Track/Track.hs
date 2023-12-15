@@ -121,7 +121,8 @@ makeFieldsNoPrefix ''Difficulty
 makeFieldsNoPrefix ''TrackState
 
 
-generateRow :: State.StateT GenerationState (Reader Configuration) ()
+generateRow :: Monad m
+            => State.StateT GenerationState (ReaderT Configuration m) ()
 generateRow = do
     width <- fromIntegral @Natural @Int <$> asks (^. options . trackWidth)
     startPartLength <- fromIntegral @Natural @Int
@@ -168,18 +169,20 @@ generateRow = do
     forM_ parityEnemiesCells $ setCell LivingEnemy
     track . rows %= (newRow :)
 
-generateObstacleRow :: Reader Configuration [Cell]
+generateObstacleRow :: Monad m => ReaderT Configuration m [Cell]
 generateObstacleRow = do
     width <- fromIntegral @Natural @Int <$> asks (^. options . trackWidth)
     return $ replicate width Obstacle
 
-generateStartRow :: Reader Configuration [Cell]
+generateStartRow :: Monad m => ReaderT Configuration m [Cell]
 generateStartRow = do
     width <- fromIntegral @Natural @Int <$> asks (^. options . trackWidth)
     let halfWidth = fromIntegral $ width `div` 2
     return $ replicate width Obstacle & element halfWidth .~ TrailPart
 
-getShiftBoundaries :: ColumnIndex -> Reader Configuration Boundaries
+getShiftBoundaries :: Monad m
+                   => ColumnIndex
+                   -> ReaderT Configuration m Boundaries
 getShiftBoundaries 0 = pure $ Boundaries (0, 1)
 getShiftBoundaries position = do
     width <- asks (^. options . trackWidth)
@@ -196,7 +199,9 @@ interpret track' generator' = _track $ runReader initialise defaultConfiguration
                                                                 initialState
          State.execStateT (interpret' track') initialGenerationState
 
-interpret' :: Track -> State.StateT GenerationState (Reader Configuration) ()
+interpret' :: Monad m
+           => Track
+           -> State.StateT GenerationState (ReaderT Configuration m) ()
 interpret' (Pure _) = pure ()
 interpret' (Free (SequenceEnd track')) = do
     markedSequence' <- use markedSequence
@@ -408,8 +413,9 @@ interpret' (Free track') = do
         Sequence InfiniteTailWhere _ -> return ()
         _ -> interpret' $ _next track'
 
-selectNextTrailPartColumns :: State.StateT GenerationState
-                                           (Reader Configuration)
+selectNextTrailPartColumns :: Monad m
+                           => State.StateT GenerationState
+                                           (ReaderT Configuration m)
                                            [ColumnIndex]
 selectNextTrailPartColumns = do
     previouses <- ((fromIntegral @Int @Natural <$>)
@@ -444,8 +450,9 @@ initialiseGenerationState generator' state
     =
     GenerationState generator' [] [] (Pure ()) [] Nothing 0 state True
 
-generatePassColumn :: State.StateT GenerationState
-                                   (Reader Configuration)
+generatePassColumn :: Monad m
+                   => State.StateT GenerationState
+                                   (ReaderT Configuration m)
                                    ColumnIndex
 generatePassColumn = do
     previousGenerator <- use generator
@@ -459,9 +466,10 @@ generatePassColumn = do
     generator .= nextGenerator
     return column
 
-scatter :: Cell
+scatter :: Monad m
+        => Cell
         -> [Cell]
-        -> State.StateT GenerationState (Reader Configuration) [Cell]
+        -> State.StateT GenerationState (ReaderT Configuration m) [Cell]
 scatter cell row = do
     difficultyLevel' <- use $ track . difficulty . level
     width <- asks (^. options . trackWidth)
@@ -581,7 +589,7 @@ trail = flip
                in row & element index'' .~ TrailPart
               )
 
-initialiseTrackState :: Reader Configuration TrackState
+initialiseTrackState :: Monad m => ReaderT Configuration m TrackState
 initialiseTrackState = do
     startRow <- generateStartRow
     startPartLength' <- fromIntegral @Natural @Int
@@ -601,8 +609,9 @@ getCycle track' = _cycle' $ runReader initialise defaultConfiguration
          State.execStateT (interpret' track') initialGenerationState
     generator' = mkStdGen 0
 
-selectParities :: [a]
-               -> State.StateT GenerationState (Reader Configuration) [Int]
+selectParities :: Monad m
+               => [a]
+               -> State.StateT GenerationState (ReaderT Configuration m) [Int]
 selectParities xs = do
     difficultyLevel' <- asks (^. options . trackDifficultyLevel)
     previousGenerator <- use generator

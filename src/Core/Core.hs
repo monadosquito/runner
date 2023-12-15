@@ -30,7 +30,7 @@ data CoreState = CoreState { _character :: CharacterState
 makeFieldsNoPrefix ''CoreState
 
 
-reflect :: Signal -> CoreState -> Reader Configuration CoreState
+reflect :: Monad m => Signal -> CoreState -> ReaderT Configuration m CoreState
 reflect (FlowSignal Progress)
         (CoreState previousChararacterState previousScore previousTrackState)
     = do

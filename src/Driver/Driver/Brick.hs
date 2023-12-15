@@ -357,7 +357,6 @@ hndlEv :: Parser p
                   IO
                   (BrickEvent () FlowEvent -> EventM () LocState ())
 hndlEv globStateRef evChan parser = do
-    opts <- asks _options
     trackPieceCap <- asks (^. preferences
                            . trackPieceCapacity
                            . to fromIntegral
@@ -454,7 +453,7 @@ hndlEv globStateRef evChan parser = do
                     currTrackRemRowsCnt' = currTrackRowsCnt
                                          `mod` trackPieceCap
                                          + (currTrackPiecesCnt' - 1)
-                core . character .= runReader revive opts
+                core . character .= runReader revive conf
                 oldCurrTrackName <- use (core . track . name)
                 core . track .= currTrackState
                 core . track . rows %= reverse
@@ -739,8 +738,7 @@ getCoreState prsr trackState = do
 
 initCoreState :: TrackState -> ReaderT Configuration IO CoreState
 initCoreState trackState = do
-    opts <- asks _options
-    let initCharPos = runReader spawn opts
+    initCharPos <- spawn
     charHP <- asks (^. options . characterHitPoints)
     return $ CoreState (CharacterState charHP initCharPos) 0 trackState
 

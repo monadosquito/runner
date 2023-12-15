@@ -34,10 +34,10 @@ obstruct (Position nextPosition) rows' state
     columnIndex = fromIntegral $ snd nextPosition
     rowIndex = fromIntegral $ fst nextPosition
 
-revive :: Reader Options CharacterState
+revive :: Monad m => ReaderT Configuration m CharacterState
 revive = do
     initialPosition <- spawn
-    hitPoints' <- asks _characterHitPoints
+    hitPoints' <- asks (^. options . characterHitPoints)
     return $ CharacterState hitPoints' initialPosition
 
 isObstacle :: Cell -> Bool

@@ -41,7 +41,7 @@ progress (Position (rowIndex, columnIndex))
     =
     Position (rowIndex + 1, columnIndex)
 
-strafe :: Side -> Position -> Reader Configuration Position
+strafe :: Monad m => Side -> Position -> ReaderT Configuration m Position
 strafe side (Position (rowIndex, columnIndex)) = do
     Boundaries shiftBoundaries <- getShiftBoundaries columnIndex
     return $ Position (case side of
@@ -49,7 +49,7 @@ strafe side (Position (rowIndex, columnIndex)) = do
                            Right' -> (rowIndex, snd shiftBoundaries)
                       )
 
-spawn :: Reader Options Position
+spawn :: Monad m => ReaderT Configuration m Position
 spawn = do
-    trackWidth' <- asks (^. trackWidth)
+    trackWidth' <- asks (^. options . trackWidth)
     return $ Position (0, trackWidth' `div` 2)
