@@ -44,13 +44,18 @@ import GHCJS.DOM.HTMLCanvasElement
 import GHCJS.DOM.Node
 import GHCJS.DOM.Types
 import GHCJS.DOM.Window
+#ifndef __GHCJS__
 import Language.Javascript.JSaddle
 import Language.Javascript.JSaddle.Warp
+#endif
 import Numeric.Natural
 import "ghcjs-dom" GHCJS.DOM.Document
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import qualified System.Random as Rand
+
+
+import Driver.Driver.Www.Js
 
 
 #ifdef __GHCJS__
@@ -62,7 +67,7 @@ type IO' = JSM
 
 data WwwState = WwwState { _drawTrackPiece :: [[Cell]] -> JSM ()
                          , _moveChar :: Int -> Int -> JSM ()
-                         , _render :: JSM ()
+                         , _render' :: JSM ()
                          }
 
 
@@ -118,17 +123,12 @@ cellToCol TrailPart = "white"
 
 cellToGeom :: Cell -> JSM (Maybe JSVal)
 cellToGeom cell = do
-    three <- jsg ("THREE" :: String)
     if | cell `elem` [Character, DeadEnemy, LivingEnemy]
-       -> Just
-          <$> (new (three ! ("SphereGeometry" :: String)) $ ([0.5] :: [Float]))
+       -> Just <$> newSphereGeom 0.5
        | cell `elem` [Pass, TrailPart]
-       -> Just
-          <$> (new (three ! ("SphereGeometry" :: String)) $ ([0.1] :: [Float]))
+       -> Just <$> newSphereGeom 0.1
        | cell == Obstacle
-       -> Just
-          <$> (new (three ! ("BoxGeometry" :: String))
-          $ ((1, 1, 1) :: (Int, Int, Int)))
+       -> Just <$> newBoxGeom 1 1 1
        | otherwise
        -> return Nothing
 
@@ -209,7 +209,8 @@ upd _ wwwStateRef (Act FeedNextTrackPiece) = do
         core . track
                   . rows
                   %= (\(part, rest)
-                      -> part ++ if null part then [] else [last part] ++ rest
+                      ->
+                      part ++ if null part then [] else [last part] ++ rest
                      )
                      . splitAt (trackPieceCap - 1)
         currTrackPiece <- use (core . track . rows . to (take trackPieceCap))
@@ -247,7 +248,7 @@ upd globStateRef wwwStateRef (Act (FeedNextTrackCycle gen)) = do
                               )
             WwwState {..} <- liftIO $ readIORef wwwStateRef
             _drawTrackPiece currTrackPiece
-            _render
+            _render'
 upd globStateRef wwwStateRef (MisoAct (HandleKs ks)) = do
     conf <- ask
     if | 27 `elem` ks -> lift . scheduleIO . liftIO $ do
@@ -329,7 +330,7 @@ upd globStateRef wwwStateRef (MisoAct (HandleKs ks)) = do
                                                                      charRow
                                                                      charCol
                                 _moveChar charXPos charZPos
-                                _render
+                                _render'
                     Nothing -> do
                         return ()
                 | playerWantsSwing -> do
@@ -376,25 +377,20 @@ upd _ wwwStateRef (MisoAct Initialise) = do
                  <$> createElement doc ("canvas" :: String)
             _ <- appendChild body canv
             jsCanv <- toJSVal canv
-            emptyArgs <- obj
-            setProp "canvas" jsCanv emptyArgs
-            args <- toJSVal emptyArgs
-            three <- jsg ("THREE" :: String)
             win <- currentWindowUnchecked
             innH <- fromIntegral @Int @Float <$> getInnerHeight win
             innW <- fromIntegral @Int @Float <$> getInnerWidth win
-            scene <- new (three ! ("Scene" :: String)) $ ()
-            trackGrp <- new (three ! ("Group" :: String)) $ ()
-            trackGrp <# ("name" :: String) $ ("track" :: String)
-            _ <- scene # ("add" :: String) $ trackGrp
-            cam <- new (three ! ("PerspectiveCamera" :: String))
-                $ (75 :: Int, innW / innH, 0.1 :: Float, 1000 :: Int)
-            cam ! ("position" :: String) <# ("z" :: String) $ (0 :: Int)
-            cam ! ("position" :: String) <# ("y" :: String) $ (20 :: Int)
-            cam ! ("rotation" :: String) <# ("x" :: String) $ -pi @Float / 2
+            scene <- newScene
+            trackGrp <- newGroup
+            setName' trackGrp "track"
+            add scene trackGrp
+            cam <- newCam 75 (innW / innH) 0.1 1000
+            setAxRot cam "x" $ -pi / 2
+            setAxPos cam "y" $ 20
+            setAxRot cam "z" $ 0
             let halfTrackPartCap = trackPartCap `div` 2
-            renderer <- new (three ! ("WebGLRenderer" :: String)) args
-            _ <- renderer # ("setSize" :: String) $ (innW, innH)
+            renderer <- newWebglRenderer jsCanv
+            setSize renderer innW innH
             let drawTrackCell :: Maybe String
                               -> Int
                               -> Int
@@ -404,32 +400,24 @@ upd _ wwwStateRef (MisoAct Initialise) = do
                     geom <- cellToGeom cell
                     case geom of
                         Just geom' -> do
-                            col <- toJSVal $ (cellToCol cell :: String)
-                            matArgs <- obj
-                            setProp "color" col matArgs
-                            jsMatArgs <- toJSVal matArgs
-                            mat <- new (three ! ("LineBasicMaterial" :: String))
-                                       $ jsMatArgs
-                            wireframe <- new (three ! ("EdgesGeometry" :: String))
-                                             $ geom'
-                            mesh <- new (three ! ("LineSegments" :: String))
-                                        $ (wireframe, mat)
-                            mesh ! ("position" :: String) <# ("x" :: String) $ x
-                            mesh ! ("position" :: String) <# ("z" :: String) $ z
+                            matCol <- toJSVal $ cellToCol cell
+                            mat <- newLineBasMat matCol
+                            wireframe <- newEdgesGeom geom'
+                            mesh <- newLineSegs wireframe mat
+                            setAxPos mesh "x" $ x
+                            setAxPos mesh "z" $ z
                             case groupName of
                                 Just groupName' -> do
-                                    group <- scene # ("getObjectByName" :: String)
-                                                   $ [groupName']
-                                    void $ group # ("add" :: String) $ mesh
+                                    group <- getObjByName scene
+                                          =<< toJSVal groupName'
+                                    add group mesh
                                 Nothing -> do
-                                    void $ scene # ("add" :: String) $ mesh
+                                    add scene mesh
                             return $ Just mesh
                         Nothing -> do
                             return Nothing
                 drawTrackPiece' piece = do
-                    trackGrp ! ("children" :: String)
-                             <# ("length" :: String)
-                             $ (0 :: Int)
+                    clearChildren trackGrp
                     let ixedTrackPart = zip [0..length piece - 1] piece
                     forM_ ixedTrackPart $ \(cellRow, trackRow) -> do
                         let ixedTrackRow = zip [0..length trackRow - 1] trackRow
@@ -444,17 +432,17 @@ upd _ wwwStateRef (MisoAct Initialise) = do
                                                    cellZPos
                                                    cell
                                 return ()
-                render' = void $ renderer # ("render" :: String) $ (scene, cam)
+                render'' = render renderer scene cam
             char <- drawTrackCell Nothing (0 :: Int) halfTrackPartCap Character
             case char of
                 Just char' -> do
                     let moveChar' x z = do
-                            char' ! ("position" :: String) <# ("x" :: String) $ x
-                            char' ! ("position" :: String) <# ("z" :: String) $ z
+                            setAxPos char' "x" $ x
+                            setAxPos char' "z" $ z
                     liftIO . writeIORef wwwStateRef
-                           $ WwwState drawTrackPiece' moveChar' render'
+                           $ WwwState drawTrackPiece' moveChar' render''
                     drawTrackPiece' currTrackPart
-                    render'
+                    render''
                 Nothing -> do
                     return ()
 upd _ _ (MisoAct Pause) = lift $ do
@@ -500,7 +488,7 @@ upd _ wwwStateRef (Act ReturnCharacter) = do
             let (charXPos, charZPos) = cellToPos conf charRow charCol
             WwwState {..} <- liftIO $ readIORef wwwStateRef
             _moveChar charXPos charZPos
-            _render
+            _render'
 upd globStateRef wwwStateRef (Act (Signal (FlowSignal Progress))) = do
     conf <- ask
     let sig = FlowSignal Progress
@@ -533,12 +521,11 @@ upd globStateRef wwwStateRef (Act (Signal (FlowSignal Progress))) = do
                                                . (& characterStuck .~ False)
                 when charHit $ do
                     modifyIORef globStateRef (& characterHitsCount %~ (+ 1))
-                
         scheduleIO_ $ do
             let (charXPos, charZPos) = cellToPos conf charRow charCol
             WwwState {..} <- liftIO $ readIORef wwwStateRef
             _moveChar charXPos charZPos
-            _render
+            _render'
 upd _ _ (Act (Signal (PlayerSignal _))) = pure ()
 upd _ _ (MisoAct TogglePauseMode) = flow . paused %= not
 
