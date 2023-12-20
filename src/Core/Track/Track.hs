@@ -123,8 +123,9 @@ makeFieldsNoPrefix ''State
 
 generateRow :: State.StateT GenerationState (Reader Configuration) ()
 generateRow = do
-    width <- fromIntegral <$> asks (^. options . trackWidth)
-    startPartLength <- fromIntegral <$> asks (^. options . trackStartPartLength)
+    width <- fromIntegral @Natural @Int <$> asks (^. options . trackWidth)
+    startPartLength <- fromIntegral @Natural @Int
+                    <$> asks (^. options . trackStartPartLength)
     trailPartColumnIndices <- selectNextTrailPartColumns
     newRow <- trail trailPartColumnIndices
            <$> (scatter Pass =<< lift generateObstacleRow)
@@ -285,7 +286,8 @@ interpret' (Free track') = do
                     case difficultyLevelSlope' of
                         GradualSlope rise run -> do
                             track . difficulty . levelSlope .= SteepSlope
-                            let piecesCount = fromIntegral $ length' `div` run
+                            let piecesCount = fromIntegral @Natural @Int
+                                            $ length' `div` run
                             interpret' . replicateM_ piecesCount $ do
                                 withAlteredDifficultyLevel rise
                                 staticLengthFinitePart run
@@ -300,12 +302,14 @@ interpret' (Free track') = do
                              else maximumDifficultyLevel
                 Condition (WithAlteredDifficultyLevel difference) _ -> do
                     oldDifficultyLevel <- use $ track . difficulty . level
-                    let newDifficultyLevel = fromIntegral oldDifficultyLevel
+                    let newDifficultyLevel = fromIntegral @Natural
+                                                          @Int
+                                                          oldDifficultyLevel
                                            + difference
-                    maximumDifficultyLevel <- fromIntegral
+                    maximumDifficultyLevel <- fromIntegral @Natural @Int
                                            <$> asks (^. options . trackWidth)
                     interpret' $ do
-                        withDifficultyLevel . fromIntegral
+                        withDifficultyLevel . fromIntegral @Int @Natural
                                             $ if | newDifficultyLevel < 0 -> 0
                                                  | newDifficultyLevel
                                                    > maximumDifficultyLevel
@@ -341,7 +345,8 @@ interpret' (Free track') = do
                 Sequence InfiniteTailWhere cycle'' -> do
                     cycle' .= cycle''
                 Part (MiddlePredefinedPart cell body) _ -> do
-                    width <- fromIntegral <$> asks (^. options . trackWidth)
+                    width <- fromIntegral @Natural @Int
+                          <$> asks (^. options . trackWidth)
                     when (rectangular body && length (head body) <= width) $ do
                         let bodyOffset = fromIntegral
                                        $ width - length (head body)
@@ -355,9 +360,10 @@ interpret' (Free track') = do
                                                        body
                         track . rows %= (offsettedBody ++)
                 Part (LeftPredefinedPart cell body) _ -> do
-                    width <- fromIntegral <$> asks (^. options . trackWidth)
+                    width <- fromIntegral @Natural @Int
+                          <$> asks (^. options . trackWidth)
                     when (rectangular body && length (head body) <= width) $ do
-                        let rightBodyOffset = fromIntegral
+                        let rightBodyOffset = fromIntegral @Int @Natural
                                             $ width - length (head body)
                             rightOffsettedBody = offsetBody cell
                                                             (Offset ( 0
@@ -367,9 +373,10 @@ interpret' (Free track') = do
                                                             body
                         track . rows %= (rightOffsettedBody ++)
                 Part (RightPredefinedPart cell body) _ -> do
-                    width <- fromIntegral <$> asks (^. options . trackWidth)
+                    width <- fromIntegral @Natural @Int
+                          <$> asks (^. options . trackWidth)
                     when (rectangular body && length (head body) <= width) $ do
-                        let leftBodyOffset = fromIntegral
+                        let leftBodyOffset = fromIntegral @Int @Natural
                                            $ width - length (head body)
                             leftOffsettedBody = offsetBody cell
                                                            (Offset ( leftBodyOffset
@@ -392,7 +399,7 @@ interpret' (Free track') = do
         Just EitherSequence -> do
             eitherSequences . _head %= (*> Free (Pure () <$ track'))
         Just (RepeatedSequence _) -> do
-            lastIndex <- fromIntegral <$> use sequenceEndsCount
+            lastIndex <- fromIntegral @Natural @Int <$> use sequenceEndsCount
             repeatedSequences . ix lastIndex
                               . _2
                               %= (*> Free (Pure () <$ track'))
@@ -405,7 +412,7 @@ selectNextTrailPartColumns :: State.StateT GenerationState
                                            (Reader Configuration)
                                            [ColumnIndex]
 selectNextTrailPartColumns = do
-    previouses <- ((fromIntegral <$>)
+    previouses <- ((fromIntegral @Int @Natural <$>)
                    . findIndices (`elem` [TrailPart, Character])
                   )
                <$> use (track . rows . _head)
@@ -420,10 +427,12 @@ selectNextTrailPartColumns = do
                         $ ((& each %~ fromIntegral @Natural @Int) . (^. un_))
                         <$> getShiftBoundaries forked
         previousGenerator' <- use generator
-        let (next', nextGenerator'') = randomR shiftBoundaries
-                                               previousGenerator'
+        let (next', nextGenerator'') = bimap (fromIntegral @Int @Natural)
+                                             id
+                                             $ randomR shiftBoundaries
+                                                       previousGenerator'
         generator .= nextGenerator''
-        return $ fromIntegral next'
+        return next'
 
 staticLengthFinitePart :: PartLength -> Track
 staticLengthFinitePart length'
@@ -440,7 +449,7 @@ generatePassPosition :: State.StateT GenerationState
                                      ColumnIndex
 generatePassPosition = do
     previousGenerator <- use generator
-    width <- fromIntegral <$> asks (^. options . trackWidth)
+    width <- fromIntegral @Natural @Int <$> asks (^. options . trackWidth)
     let firstColumn = 0 :: Int
         lastColumn = width - 1 :: Int
         (position, nextGenerator) = bimap (fromIntegral @Int @Natural)
@@ -456,14 +465,14 @@ scatter :: Cell
 scatter cell row = do
     difficultyLevel' <- use $ track . difficulty . level
     width <- asks (^. options . trackWidth)
-    let passesCount = fromIntegral $ width - difficultyLevel'
+    let passesCount = fromIntegral @Natural @Int $ width - difficultyLevel'
     passPositions <- replicateM passesCount generatePassPosition
     return $ row & traversed
                  . withIndex
                  . filteredBy (_1
                                . to ((`find` passPositions)
                                      . (==)
-                                     . fromIntegral
+                                     . fromIntegral @Int @Natural
                                     )
                                . _Just
                               )
@@ -549,8 +558,8 @@ offsetBody cell (Offset (left, right))
     =
     (^.. each . to ((++ replicate right'' cell) . (replicate left'' cell ++)))
   where
-    left'' = fromIntegral left
-    right'' = fromIntegral right
+    left'' = fromIntegral @Natural @Int left
+    right'' = fromIntegral @Natural @Int right
 
 rightPredefinedPart :: Cell -> PartBody -> Track
 rightPredefinedPart cell body
@@ -578,7 +587,8 @@ trail = flip
 initialiseState :: Reader Configuration State
 initialiseState = do
     startRow <- generateStartRow
-    startPartLength' <- fromIntegral <$> asks (^. options . trackStartPartLength)
+    startPartLength' <- fromIntegral @Natural @Int
+                     <$> asks (^. options . trackStartPartLength)
     let startPart = replicate startPartLength' startRow
     difficultyLevel' <- asks (^. options . trackDifficultyLevel)
     name' <- asks (^. preferences . trackName)
@@ -605,7 +615,7 @@ selectParities xs = do
                                                 )
                                                 previousGenerator
         (parity, newGenerator') = randomR ((0, 1) :: (Int, Int)) nextGenerator
-        maximumCount = fromIntegral $ width - difficultyLevel'
+        maximumCount = fromIntegral @Natural @Int $ width - difficultyLevel'
     generator .= newGenerator'
     ns <- replicateM currentCount $ do
         previousGenerator' <- use generator

@@ -322,7 +322,7 @@ draw = do
               ]
         f (LocState Nothing _ _ slctMenuItemIx' _)
             =
-            case toEnum slctMenuItemIx' of
+            case toEnum @Page slctMenuItemIx' of
                 RacePage -> slctRacePage
                 TrackSlctPage -> slctTrackSlctPage
                 KBindsPage -> slctKBindsPage
@@ -528,7 +528,7 @@ hndlEv globStateRef evChan parser = do
                         Just KBindsPage -> do
                             kBindsAdded %= not
                         Nothing -> do
-                            slctPage' <- toEnum <$> use slctMenuItemIx
+                            slctPage' <- toEnum @Page <$> use slctMenuItemIx
                             actPage .= Just slctPage'
                             when (slctPage' == RacePage) $ do
                                 liftIO $ do
@@ -547,11 +547,11 @@ hndlEv globStateRef evChan parser = do
                     actPage' <- use actPage
                     if actPage' == Nothing
                     then do
-                        slctPage' <- toEnum <$> use slctMenuItemIx
+                        slctPage' <- toEnum @Page <$> use slctMenuItemIx
                         actPage .= Just slctPage'
                     else do
                         actPage .= Nothing
-                    slctPage' <- toEnum <$> use slctMenuItemIx
+                    slctPage' <- toEnum @Page <$> use slctMenuItemIx
                     when (slctPage' == RacePage) . liftIO $ do
                         modifyIORef globStateRef
                                     $ (& paused .~ False) . (started .~ False)
@@ -562,8 +562,11 @@ hndlEv globStateRef evChan parser = do
                         Just KBindsPage -> do
                             let playerSig = toEnum @PlayerSignal slctMenuItemIx'
                             if (playerSig > minBound)
-                            then slctMenuItemIx %= pred
-                            else slctMenuItemIx .= fromEnum (maxBound @PlayerSignal)
+                            then do
+                                slctMenuItemIx %= pred
+                            else do
+                                slctMenuItemIx .= fromEnum @PlayerSignal
+                                                           (maxBound @PlayerSignal)
                         Just RacePage -> do
                             return ()
                         Just TrackSlctPage -> do
@@ -576,8 +579,11 @@ hndlEv globStateRef evChan parser = do
                         Nothing -> do
                             let page = toEnum @Page slctMenuItemIx'
                             if (page > minBound)
-                            then slctMenuItemIx %= pred
-                            else slctMenuItemIx .= fromEnum (maxBound @Page)
+                            then do
+                                slctMenuItemIx %= pred
+                            else do
+                                slctMenuItemIx .= fromEnum @Page
+                                                           (maxBound @Page)
                    | k `elem` [Vty.KChar 's', Vty.KDown] -> do
                     slctMenuItemIx' <- use slctMenuItemIx
                     actPage' <- use actPage
