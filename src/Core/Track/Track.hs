@@ -169,15 +169,14 @@ generateRow = do
 
 generateObstacleRow :: Reader Configuration [Cell]
 generateObstacleRow = do
-    width <- asks (^. options . trackWidth)
-    return $ replicate (fromIntegral width) Obstacle
+    width <- fromIntegral @Natural @Int <$> asks (^. options . trackWidth)
+    return $ replicate width Obstacle
 
 generateStartRow :: Reader Configuration [Cell]
 generateStartRow = do
-    width <- asks (^. options . trackWidth)
-    return $ replicate (fromIntegral width) Obstacle
-           & element (fromIntegral $ width `div` 2)
-           .~ TrailPart
+    width <- fromIntegral @Natural @Int <$> asks (^. options . trackWidth)
+    let halfWidth = fromIntegral $ width `div` 2
+    return $ replicate width Obstacle & element halfWidth .~ TrailPart
 
 getShiftBoundaries :: ColumnIndex -> Reader Configuration Boundaries
 getShiftBoundaries 0 = pure $ Boundaries (0, 1)
@@ -382,10 +381,14 @@ interpret' (Free track') = do
                 Part (DynamicLengthFinitePart (Range range)) _ -> do
                     previousGenerator <- use generator
                     let range' = range & each %~ fromIntegral @Natural @Int
-                        (length', nextGenerator) = randomR range'
-                                                           previousGenerator
+                        (length', nextGenerator) = bimap (fromIntegral @Int
+                                                                       @Natural                                                              
+                                                         )
+                                                         id
+                                                         $ randomR range'
+                                                                   previousGenerator
                     generator .= nextGenerator
-                    interpret' . staticLengthFinitePart $ fromIntegral length'
+                    interpret' $ staticLengthFinitePart length'
         Just EitherSequence -> do
             eitherSequences . _head %= (*> Free (Pure () <$ track'))
         Just (RepeatedSequence _) -> do
@@ -437,11 +440,15 @@ generatePassPosition :: State.StateT GenerationState
                                      ColumnIndex
 generatePassPosition = do
     previousGenerator <- use generator
-    width <- asks (^. options . trackWidth)
-    let (position, nextGenerator) = randomR (0 :: Int, fromIntegral $ width - 1)
-                                            previousGenerator
+    width <- fromIntegral <$> asks (^. options . trackWidth)
+    let firstColumn = 0 :: Int
+        lastColumn = width - 1 :: Int
+        (position, nextGenerator) = bimap (fromIntegral @Int @Natural)
+                                          id
+                                          $ randomR (firstColumn, lastColumn)
+                                                    previousGenerator
     generator .= nextGenerator
-    return $ fromIntegral position
+    return position
 
 scatter :: Cell
         -> [Cell]
@@ -449,8 +456,8 @@ scatter :: Cell
 scatter cell row = do
     difficultyLevel' <- use $ track . difficulty . level
     width <- asks (^. options . trackWidth)
-    passPositions <- replicateM (fromIntegral $ width - difficultyLevel')
-                                generatePassPosition
+    let passesCount = fromIntegral $ width - difficultyLevel'
+    passPositions <- replicateM passesCount generatePassPosition
     return $ row & traversed
                  . withIndex
                  . filteredBy (_1
@@ -562,7 +569,11 @@ dynamicLengthFinitePart range
 
 trail :: [ColumnIndex] -> [Cell] -> [Cell]
 trail = flip
-      $ foldr (\index' row -> row & element (fromIntegral index') .~ TrailPart)
+      $ foldr (\index' row
+               ->
+               let index'' = fromIntegral @Natural @Int index'
+               in row & element index'' .~ TrailPart
+              )
 
 initialiseState :: Reader Configuration State
 initialiseState = do
