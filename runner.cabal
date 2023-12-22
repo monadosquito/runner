@@ -1,4 +1,4 @@
-cabal-version: 3.0
+cabal-version: 2.0
 
 author: monadosquito
 extra-source-files: CHANGELOG.md
@@ -35,6 +35,7 @@ executable runner
             brick,
             vty,
             directory
+    cpp-options: -DWWW
     default-language: Haskell2010
     ghc-options: -Wall -fforce-recomp -fno-code
     hs-source-dirs: src
@@ -67,4 +68,5 @@ executable runner
         Driver.Driver.Www.Www,
         Driver.Www.Comm,
         Core.Flow.Flow,
-        Core.Script.Flow.Flow1,
+        Core.Script.Flow.Flow1
+custom-setup
