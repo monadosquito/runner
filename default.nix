@@ -16,9 +16,17 @@ in
                           ./.
                           {};
         consRunner = nixpkgs.haskell.lib.enableCabalFlag ghcRunner "cons";
+        dryRunConsRunner = nixpkgs.haskell.lib.enableCabalFlag
+                               consRunner
+                               "dry-run";
         wwwRunner = nixpkgs.haskell.lib.enableCabalFlag ghcjsRunner "www";
+        dryRunWwwRunner = nixpkgs.haskell.lib.enableCabalFlag
+                              wwwRunner
+                              "dry-run";
     in
     {
         cons = consRunner;
+        dry-run-cons = dryRunConsRunner;
         www = wwwRunner;
+        dry-run-www = dryRunWwwRunner;
     }

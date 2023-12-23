@@ -36,7 +36,7 @@ executable runner
             vty,
             directory
     default-language: Haskell2010
-    ghc-options: -Wall -fforce-recomp -fno-code
+    ghc-options: -Wall
     hs-source-dirs: src
     main-is: Main.hs
     other-modules:
@@ -68,10 +68,14 @@ executable runner
         Driver.Www.Comm,
         Core.Flow.Flow,
         Core.Script.Flow.Flow1
-    if flag(cons)
+    if flag(cons) && !flag(dry-run)
         cpp-options: -DCONS
-    if flag(www)
+    if flag(cons) && flag(dry-run)
+        cpp-options: -DCONS -fforce-recomp -fno-code
+    if flag(www) && !flag(dry-run)
         cpp-options: -DWWW
+    if flag(www) && flag(dry-run)
+        cpp-options: -DWWW -fforce-recomp -fno-code
 custom-setup
 
 flag cons
@@ -79,5 +83,9 @@ flag cons
     default: False
 
 flag www
+    manual: True
+    default: False
+
+flag dry-run
     manual: True
     default: False
