@@ -2,9 +2,13 @@
 {-# LANGUAGE CPP #-}
 
 
-import Core.Port.Driver
+import qualified Core.Port.Driver as DriverPort
 
+#if defined(CONS)
+import qualified Driver.Driver.Brick as Driver
+#elif defined(WWW)
 import qualified Driver.Driver.Www.Www as Driver
+#endif
 import Driver.Parser.Aeson
 
 import Control.Monad.Reader
@@ -13,18 +17,32 @@ import Data.Proxy
 import Core.Configuration.Configuration
 import Core.Port.Environment
 
+#if defined(CONS)
+import qualified Driver.Environment.Console as Env
+#elif defined(WWW)
 import qualified Driver.Environment.Www as Env
-
+#endif
 
 #if defined(WWW) && !defined(__GHCJS__)
 import Language.Javascript.JSaddle
 import qualified Language.Javascript.JSaddle.Warp as Jsaddle
 #endif
+
+
+#if defined(CONS)
+type Driver = Driver.Console
+type Env = Env.Console
+#elif defined(WWW)
+type Driver = Driver.Www
+type Env = Env.Www
+#endif
+
+
 main :: IO ()
 main = runApp $ do
-    prefs <- getPreferences (Proxy @Env.Www) $ Proxy @Aeson
+    prefs <- getPreferences (Proxy @Env) $ Proxy @Aeson
     let conf = Configuration prefs defaultOptions
-    liftIO $ runReaderT (run (Proxy @Driver.Www) $ Proxy @Aeson) conf
+    liftIO $ runReaderT (DriverPort.run (Proxy @Driver) $ Proxy @Aeson) conf
 
 #if defined(CONS)
 runApp :: IO () -> IO ()

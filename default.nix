@@ -10,11 +10,15 @@ in
     }
     :
     let hsPkgs = nixpkgs.haskellPackages.extend overlays.brick;
+        ghcRunner = hsPkgs.callCabal2nix "runner" ./. {};
+        ghcjsRunner = miso.pkgs.haskell.packages.ghcjs.callCabal2nix
+                          "runner"
+                          ./.
+                          {};
+        consRunner = nixpkgs.haskell.lib.enableCabalFlag ghcRunner "cons";
+        wwwRunner = nixpkgs.haskell.lib.enableCabalFlag ghcjsRunner "www";
     in
     {
-        withGhc = hsPkgs.callCabal2nix "runner" ./. {};
-        withGhcjs = miso.pkgs.haskell.packages.ghcjs.callCabal2nix
-                        "runner"
-                        ./.
-                        {};
+        cons = consRunner;
+        www = wwwRunner;
     }
