@@ -11,8 +11,11 @@ import Driver.Parser.Aeson
 import Control.Monad.Reader
 import Data.Proxy
 
+import Core.Configuration.Configuration
+
 
 main :: IO ()
 main = do
-    conf <- getConfiguration (Proxy @Sys) $ Proxy @Aeson
+    prefs <- getPreferences (Proxy @Sys) $ Proxy @Aeson
+    let conf = Configuration prefs defaultOptions 
     runReaderT (run (Proxy @Brick) $ Proxy @Aeson) conf

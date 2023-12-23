@@ -8,4 +8,4 @@ import Core.Port.Parser
 
 
 class Environment e where
-    getConfiguration :: Parser p => Proxy e -> Proxy p -> IO Configuration
+    getPreferences :: Parser p => Proxy e -> Proxy p -> IO Preferences

@@ -63,6 +63,22 @@ instance Parser Aeson where
         in State.execState dfltNotSetOpts defaultConfiguration
     serialiseExternalState _ = Aeson.encode
     deserialiseExternalState _ = Aeson.decode
+    deserialisePreferences _ conf
+        =
+        let dfltNotSetOpts = dfltNotSetOpt "configurationFilePath"
+                                           configurationFilePath
+                                           (_String . to unpack)
+                           *> dfltNotSetOpt "trackName"
+                                            trackName
+                                            (_String . to unpack)
+                           *> dfltNotSetOpt "trackPieceCapacity"
+                                            trackPieceCapacity
+                                            _Integral
+            dfltNotSetOpt optName optSetter optType
+                | Just optVal <- conf ^? key optName . optType
+                = optSetter .= optVal
+                | otherwise = return ()
+        in State.execState dfltNotSetOpts defaultPreferences
 
 instance Aeson.FromJSON Character.State where
 instance Aeson.FromJSON State where

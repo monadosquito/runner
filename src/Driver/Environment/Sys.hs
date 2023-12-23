@@ -12,7 +12,6 @@ import Control.Exception
 import qualified Data.ByteString.Lazy as ByteString
 
 import Options.Applicative
-import Control.Lens
 
 import Core.Script.Track
 
@@ -21,7 +20,7 @@ import Core.Port.Parser
 
 data Sys
 instance Environment Sys where
-    getConfiguration _ parser = do
+    getPreferences _ parser = do
         let readPrefs prefs' = Preferences
                              <$> strOption (completeWith (map fst tracks)
                                             <> long "track-name"
@@ -40,60 +39,12 @@ instance Environment Sys where
                                       <> short 'p'
                                       <> value (_trackPieceCapacity prefs')
                                      )
-            readConf (Configuration prefs' opts) = Configuration
-                                                 <$> readPrefs prefs'
-                                                 <*> readOpts opts
-            readOpts opts = Options <$> option auto (long "track-width"
-                                                     <> metavar "NATURAL_NUMBER"
-                                                     <> short 'w'
-                                                     <> value (_trackWidth opts)
-                                                    )
-                                    <*> option auto
-                                               (long "track-difficulty-level"
-                                                <> metavar "NATURAL_NUMBER"
-                                                <> short 'd'
-                                                <> value (_trackDifficultyLevel opts)
-                                               )
-                                    <*> option auto
-                                               (long "track-start-part-length"
-                                                <> metavar "NATURAL_NUMBER"
-                                                <> short 'l'
-                                                <> value (_trackStartPartLength opts)
-                                               )
-                                    <*> option auto
-                                               (long "character-progress-speed"
-                                                <> metavar "FLOATING_NUMBER"
-                                                <> short 's'
-                                                <> value (_characterProgressSpeed opts)
-                                               )
-                                    <*> option auto
-                                               (long "character-hit-points"
-                                                <> metavar "NATURAL_NUMBER"
-                                                <> short 'p'
-                                                <> value (_characterHitPoints opts)
-                                               )
-                                    <*> option auto
-                                               (long "row-crossing-score-bonus"
-                                                <> metavar "NATURAL_NUMBER"
-                                                <> short 'r'
-                                                <> value (_rowCrossingScoreBonus opts)
-                                               )
-                                    <*> option auto
-                                               (long "enemy-killing-score-bonus"
-                                                <> metavar "NATURAL_NUMBER"
-                                                <> short 'k'
-                                                <> value (_enemyKillingScoreBonus opts)
-                                               )
-        argConf <- execParser
-                 $ info (readConf defaultConfiguration <**> helper)
-                        fullDesc
+        argPrefs <- execParser
+                 $ info (readPrefs defaultPreferences <**> helper) fullDesc
         fileConf <- catch @IOException
-                          (deserialiseConfiguration parser
-                           <$> ByteString.readFile (argConf
-                                                    ^. preferences
-                                                    . configurationFilePath
-                                                   )
+                          (deserialisePreferences parser
+                           <$> ByteString.readFile (_configurationFilePath argPrefs)
                           )
-                  . const
-                  $ pure defaultConfiguration
-        execParser $ info (readConf fileConf <**> helper) fullDesc
+                 . const
+                 $ pure defaultPreferences
+        execParser $ info (readPrefs fileConf <**> helper) fullDesc
