@@ -23,6 +23,7 @@ import qualified Data.Aeson as Aeson
 import qualified GHC.Generics as Gen
 
 import Core.Core
+import Core.Signal.Signal
 
 
 data Aeson
@@ -103,3 +104,6 @@ deriving instance Gen.Generic Slope
 deriving instance Gen.Generic TrackState
 instance Aeson.FromJSON Preferences where
 deriving instance Gen.Generic Preferences
+instance Aeson.FromJSON PlayerSignal where
+deriving instance Gen.Generic PlayerSignal
+instance Aeson.FromJSONKey PlayerSignal where

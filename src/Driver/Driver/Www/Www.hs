@@ -43,7 +43,7 @@ import GHCJS.DOM
 import GHCJS.DOM.HTMLCanvasElement
 import GHCJS.DOM.Node
 import GHCJS.DOM.Types
-import GHCJS.DOM.Window
+import GHCJS.DOM.Window hiding (getLocalStorage)
 #ifndef __GHCJS__
 import Language.Javascript.JSaddle
 import Language.Javascript.JSaddle.Warp
@@ -57,12 +57,7 @@ import qualified System.Random as Rand
 
 import Driver.Driver.Www.Js
 
-
-#ifdef __GHCJS__
-type IO' = IO
-#else
-type IO' = JSM
-#endif
+import Driver.Parser.Aeson ()
 
 
 data WwwState = WwwState { _drawTrackPiece :: [[Cell]] -> JSM ()
@@ -91,7 +86,7 @@ instance Driver Www where
             let events = defaultEvents
                 initialAction = MisoAct Initialise
                 logLevel = Off
-                model = Mdl initCoreState initGlobState
+                model = Mdl initCoreState initGlobState Map.empty
                 mountPoint = Nothing
                 subs = [flowSub, keyboardSub $ MisoAct . HandleKs]
                 update = fromTransition
@@ -251,114 +246,100 @@ upd globStateRef wwwStateRef (Act (FeedNextTrackCycle gen)) = do
             _render'
 upd globStateRef wwwStateRef (MisoAct (HandleKs ks)) = do
     conf <- ask
-    if | 27 `elem` ks -> lift . scheduleIO . liftIO $ do
+    trackPieceCap <- asks (^. preferences
+                           . trackPieceCapacity
+                           . to (fromIntegral @Natural @Int)
+                          )
+    kBinds' <- lift $ use kBinds
+    let currPlayerSigs = Map.keys $ Map.filter (`elem` (Set.toList ks)) kBinds'
+        playerWantsPause = Pause `elem` currPlayerSigs 
+        playerWantsQuit = Quit `elem` currPlayerSigs
+    if | playerWantsPause -> lift . scheduleIO . liftIO $ do
         modifyIORef globStateRef (& paused %~ not)
         return $ MisoAct TogglePauseMode
-       | 81 `elem` ks -> lift . scheduleIO . liftIO $ do
+       | playerWantsQuit -> lift . scheduleIO . liftIO $ do
         FlowState {..} <- readIORef globStateRef
         maybe (return ()) killThread _flowThreadId
         maybe (return ()) killThread _sessionThreadId
-        return $ MisoAct Pause
+        return $ MisoAct Pause'
        | otherwise -> do
         paused' <- use (flow . paused)
         trackPassed <- use (core . track . rows . to ((== 0) . length))
         when (not paused' && not trackPassed) $ do
-            let currPlayerSigs = map keyCodeToSig $ Set.toList ks
-                playerWantsStrafe = Just StrafeLeft `elem` currPlayerSigs
-                                  || Just StrafeRight `elem` currPlayerSigs
-                playerWantsSwing = Just SwingLeft `elem` currPlayerSigs
-                                 || Just SwingRight `elem` currPlayerSigs
-                trackPieceCap = conf
-                              ^. preferences
-                              . trackPieceCapacity
-                              . to (fromIntegral @Natural @Int)
+            let playerWantsStrafe = StrafeLeft `elem` currPlayerSigs
+                                  || StrafeRight `elem` currPlayerSigs
+                playerWantsSwing = SwingLeft `elem` currPlayerSigs
+                                 || SwingRight `elem` currPlayerSigs
             if | playerWantsStrafe -> do
-                let currStrafePlayerSig | Just StrafeLeft `elem` currPlayerSigs
-                                        = Just StrafeLeft
-                                        | Just StrafeRight `elem` currPlayerSigs
-                                        = Just StrafeRight
+                let currStrafePlayerSig | StrafeLeft `elem` currPlayerSigs
+                                        = StrafeLeft
+                                        | StrafeRight `elem` currPlayerSigs
+                                        = StrafeRight
                                         | otherwise
-                                        = Nothing
-                    currStrafeSig = PlayerSignal <$> currStrafePlayerSig
-                case currStrafeSig of
-                    Just currStrafeSig' -> do
-                        prevCoreState <- lift $ use core
-                        nextCoreState <- reflect currStrafeSig' prevCoreState
-                        lift $ do
-                            prevCharCol <- use (core
+                                        = error "undefined strafe signal"
+                    currStrafeSig = PlayerSignal currStrafePlayerSig
+                prevCoreState <- lift $ use core
+                nextCoreState <- reflect currStrafeSig prevCoreState
+                lift $ do
+                    prevCharCol <- use (core
+                                        . character
+                                        . position
+                                        . unPosition
+                                        . _2
+                                       )
+                    core .= nextCoreState
+                    nextCharCol <- use (core
+                                        . character
+                                        . position
+                                        . unPosition
+                                        . _2
+                                       )
+                    (charRow, charCol) <- bimap (fromIntegral @Natural @Int)
+                                                (fromIntegral @Natural @Int)
+                                       <$> use (core
                                                 . character
                                                 . position
                                                 . unPosition
-                                                . _2
                                                )
-                            core .= nextCoreState
-                            nextCharCol <- use (core
-                                                . character
-                                                . position
-                                                . unPosition
-                                                . _2
-                                               )
-                            (charRow, charCol) <- bimap (fromIntegral @Natural
-                                                                      @Int
-                                                        )
-                                                        (fromIntegral @Natural
-                                                                      @Int
-                                                        )
-                                               <$> use (core
-                                                        . character
-                                                        . position
-                                                        . unPosition
-                                                       )
-                            charHP <- use (core . character . hitPoints)
-                            scheduleIO_ $ do
-                                WwwState {..} <- liftIO $ do
-                                    let charMoved = prevCharCol /= nextCharCol
-                                    modifyIORef globStateRef
-                                                (& characterStuck
-                                                 .~ not charMoved
-                                                )
-                                    let charDead = charHP == 0
-                                    when charDead $ do
-                                        modifyIORef globStateRef
-                                                    $ (& characterStuck
-                                                       .~ False
-                                                      )
-                                                      . (& paused .~ False)
-                                                      . (& started .~ False)
-                                    readIORef wwwStateRef
-                                let (charXPos, charZPos) = cellToPos conf
-                                                                     charRow
-                                                                     charCol
-                                _moveChar charXPos charZPos
-                                _render'
-                    Nothing -> do
-                        return ()
+                    charHP <- use (core . character . hitPoints)
+                    scheduleIO_ $ do
+                        WwwState {..} <- liftIO $ do
+                            let charMoved = prevCharCol /= nextCharCol
+                            modifyIORef globStateRef
+                                        (& characterStuck .~ not charMoved)
+                            let charDead = charHP == 0
+                            when charDead $ do
+                                modifyIORef globStateRef
+                                            $ (& characterStuck .~ False)
+                                              . (& paused .~ False)
+                                              . (& started .~ False)
+                            readIORef wwwStateRef
+                        let (charXPos, charZPos) = cellToPos conf
+                                                             charRow
+                                                             charCol
+                        _moveChar charXPos charZPos
+                        _render'
                 | playerWantsSwing -> do
-                    let currSwingPlayerSig
-                            | Just SwingLeft `elem` currPlayerSigs
-                            = Just SwingLeft
-                            | Just SwingRight `elem` currPlayerSigs
-                            = Just SwingRight
-                            | otherwise
-                            = Nothing
-                        currSwingSig = PlayerSignal <$> currSwingPlayerSig
-                    case currSwingSig of
-                        Just currSwingSig' -> do
-                            prevCoreState <- lift $ use core
-                            nextCoreState <- reflect currSwingSig' prevCoreState
-                            lift $ do
-                                core .= nextCoreState
-                                currTrackPiece <- use (core
-                                                       . track
-                                                       . rows
-                                                       . to (take trackPieceCap)
-                                                      )
-                                scheduleIO_ $ do
-                                    WwwState {..} <- liftIO $ readIORef wwwStateRef
-                                    _drawTrackPiece currTrackPiece
-                        Nothing -> do
-                            return ()
-                    return ()
+                    let currSwingPlayerSig | SwingLeft `elem` currPlayerSigs
+                                           = SwingLeft
+                                           | SwingRight `elem` currPlayerSigs
+                                           = SwingRight
+                                           | otherwise
+                                           = error "undefined swing signal"
+                        currSwingSig = PlayerSignal currSwingPlayerSig
+                    prevCoreState <- lift $ use core
+                    nextCoreState <- reflect currSwingSig prevCoreState
+                    lift $ do
+                        core .= nextCoreState
+                        currTrackPiece <- use (core
+                                               . track
+                                               . rows
+                                               . to (take trackPieceCap)
+                                              )
+                        scheduleIO_ $ do
+                            WwwState {..} <- liftIO $ readIORef wwwStateRef
+                            _drawTrackPiece currTrackPiece
+                            _render'
                 | otherwise -> do
                     return ()
 upd _ wwwStateRef (MisoAct Initialise) = do
@@ -369,7 +350,7 @@ upd _ wwwStateRef (MisoAct Initialise) = do
                          )
     lift $ do
         currTrackPart <- use (core . track . rows . to (take trackPartCap))
-        scheduleIO_ $ do
+        scheduleIO $ do
             liftIO $ threadDelay 100000
             doc <- currentDocumentUnchecked
             body <- getBodyUnchecked doc
@@ -408,9 +389,9 @@ upd _ wwwStateRef (MisoAct Initialise) = do
                             setAxPos mesh "z" $ z
                             case groupName of
                                 Just groupName' -> do
-                                    group <- getObjByName scene
-                                          =<< toJSVal groupName'
-                                    add group mesh
+                                    group' <- getObjByName scene
+                                           =<< toJSVal groupName'
+                                    add group' mesh
                                 Nothing -> do
                                     add scene mesh
                             return $ Just mesh
@@ -445,8 +426,10 @@ upd _ wwwStateRef (MisoAct Initialise) = do
                     render''
                 Nothing -> do
                     return ()
-upd _ _ (MisoAct Pause) = lift $ do
-    flow . paused .= True 
+            kBinds' <- either (const defKBinds) id
+                    <$> getLocalStorage @(Map.Map PlayerSignal Int) "k-binds"
+            return $ MisoAct (SetKBinds kBinds')
+upd _ _ (MisoAct Pause') = lift $ flow . paused .= True 
 upd globStateRef wwwStateRef (Act (Refresh gen)) = do
     conf <- ask
     currTrackName <- asks (^. preferences . trackName)
@@ -489,6 +472,7 @@ upd _ wwwStateRef (Act ReturnCharacter) = do
             WwwState {..} <- liftIO $ readIORef wwwStateRef
             _moveChar charXPos charZPos
             _render'
+upd _ _ (MisoAct (SetKBinds kBinds')) = lift $ kBinds .= kBinds'
 upd globStateRef wwwStateRef (Act (Signal (FlowSignal Progress))) = do
     conf <- ask
     let sig = FlowSignal Progress
@@ -536,3 +520,14 @@ runApp = id
 runApp :: JSM () -> IO ()
 runApp f = debugOr 8000 (f >> syncPoint) jsaddleApp
 #endif
+
+defKBinds :: Map.Map PlayerSignal Int
+defKBinds
+    =
+    Map.fromList [ (StrafeLeft, 72)
+                 , (SwingLeft, 74)
+                 , (SwingRight, 75)
+                 , (StrafeRight, 76)
+                 , (Pause, 27)
+                 , (Quit, 81)
+                 ]
