@@ -39,11 +39,12 @@ data FlowState = FlowState { _characterHitsCount
                            , _characterMoved
                            , _characterStuck
                            , _paused
-                           , _started :: Bool
+                           , _started
+                           , _trackBodyPassed :: Bool
                            , _flowThreadId
                            , _sessionThreadId :: Maybe ThreadId
                            , _trackName :: String
-                           } deriving Eq
+                           } deriving (Eq, Show)
 
 data Action = FeedNextTrackCycle StdGen
             | FeedNextTrackPiece
@@ -91,4 +92,13 @@ writeState globalState = Free (WriteState globalState Pure)
 initialiseFlowState :: Monad m => ReaderT Configuration m FlowState
 initialiseFlowState = do
     trackName' <- asks (^. preferences . trackName)
-    return $ FlowState 0 0 False False False False Nothing Nothing trackName'
+    return $ FlowState 0
+                       0
+                       False
+                       False
+                       False
+                       True
+                       False
+                       Nothing
+                       Nothing
+                       trackName'

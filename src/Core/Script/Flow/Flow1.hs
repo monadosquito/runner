@@ -75,29 +75,21 @@ flow1 = do
                 trackCycle = getCycle track'
                 trackHasTail = is _Free trackCycle
             when trackHasTail passTrackTail
-        startNewRacing = do
-            wait 1000000
-            nextSessionThreadId <- fork passTrack
-            modifyState $ (& characterStuck .~ False)
-                          . (& characterHitsCount .~ 0)
-                          . (& started .~ True)
-                          . (& paused .~ False)
-                          . (& sessionThreadId .~ Just nextSessionThreadId)
     return $ do
         wait 100000
-        startNewRacing
-        flowThreadId' <- fork . forever $ wait 10000 `until'` (not . _started) $ do
-            FlowState {..} <- readState
-            maybe (return ()) killThread' _sessionThreadId
-            generator' <- makeGenerator
-            dispatch $ Refresh generator'
-            wait 200000
-            nextSessionThreadId <- fork passTrack
-            wait 300000
-            modifyState $ (& characterStuck .~ False)
-                          . (& characterHitsCount .~ 0)
-                          . (& started .~ True)
-                          . (& paused .~ False)
-                          . (& sessionThreadId .~ Just nextSessionThreadId)
+        flowThreadId' <- fork $ do
+            forever $ wait 10000 `until'` (not . _started) $ do
+                FlowState {..} <- readState
+                maybe (return ()) killThread' _sessionThreadId
+                generator' <- makeGenerator
+                dispatch $ Refresh generator'
+                wait 200000
+                nextSessionThreadId <- fork passTrack
+                wait 300000
+                modifyState $ (& characterStuck .~ False)
+                              . (& characterHitsCount .~ 0)
+                              . (& started .~ True)
+                              . (& paused .~ False)
+                              . (& sessionThreadId .~ Just nextSessionThreadId)
         wait 200000
         modifyState (& flowThreadId .~ Just flowThreadId')

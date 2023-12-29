@@ -70,7 +70,8 @@ instance Show Page where
 
 data LocState = LocState { _actPage :: Maybe Page
                          , _kBinds :: [(PlayerSignal, [Binding])]
-                         , _kBindsAdded :: Bool
+                         , _kBindsAdded
+                         , _trackBodyPassed :: Bool
                          , _slctMenuItemIx :: Int
                          , _core :: CoreState
                          }
@@ -81,24 +82,18 @@ makeFieldsNoPrefix ''LocState
 
 data Console
 instance Driver Console where
-    run _ parser = do
-        currTrackName <- asks (^. preferences . trackName)
+    run _ parser coreState = do
         conf <- ask
         initGlobState <- initialiseFlowState
-        (currTrackState, evChan, globStateRef) <- liftIO $ do
-            gen <- newStdGen
-            let currTrack = tracks' Map.! currTrackName
-                interpret'' = configure conf
-                currTrackState = interpret'' currTrack gen
+        (evChan, globStateRef) <- liftIO $ do
             evChan <- newBChan 10
             globStateRef <- newIORef initGlobState
             let currFlow = runReader flow1 conf
                 dispatch' = writeBChan evChan
             runFlow globStateRef dispatch' currFlow
-            return (currTrackState, evChan, globStateRef)
+            return (evChan, globStateRef)
         app' <- app globStateRef parser
         kBinds' <- liftIO getKBinds
-        coreState <- getCoreState parser currTrackState
         let bldVty = Vty.mkVty Vty.defaultConfig
             initLocState' = initLocState coreState kBinds'
         liftIO $ do
@@ -129,6 +124,7 @@ draw = do
                     _
                     _
                     _
+                    _
                     (CoreState (CharacterState hp _) score' trackState)
           )
             =
@@ -141,7 +137,7 @@ draw = do
                                        )
                            <=> hCenter (str $ "HP: " ++ show hp)
                 ]
-        f (LocState (Just KBindsPage) kBinds' kBindsAdded' slctMenuItemIx' _)
+        f (LocState (Just KBindsPage) kBinds' kBindsAdded' _ slctMenuItemIx' _)
             = case sig' of
                   StrafeLeft
                       ->
@@ -179,7 +175,7 @@ draw = do
                                     <=> kBindWid SwingRight True kBindsAdded'
                                    )
                       ]
-                  Quit
+                  _
                       ->
                       []
           where
@@ -215,6 +211,7 @@ draw = do
         f (LocState (Just TrackSlctPage)
            _
            _
+           _
            slctMenuItemIx'
            (CoreState _ _ (TrackState _ _ name'))
           )
@@ -235,7 +232,7 @@ draw = do
                          )
                        $ Map.keys tracks'
               ]
-        f (LocState Nothing _ _ slctMenuItemIx' _)
+        f (LocState Nothing _ _ _ slctMenuItemIx' _)
             =
             case toEnum @Page slctMenuItemIx' of
                 RacePage -> slctRacePage
@@ -365,7 +362,9 @@ hndlEv globStateRef parser = do
                 let currTrackState = interpret'' currTrack gen & rows %~ reverse
                     initExtState = runReader (initialiseCoreState currTrackState)
                                              conf
-                core .= initExtState
+                trackBodyPassed' <- use trackBodyPassed
+                trackBodyPassed .= True
+                when trackBodyPassed' $ core .= initExtState
                 core . track . name .= currTrackName
                 core . track
                      . rows
@@ -450,13 +449,15 @@ hndlEv globStateRef parser = do
                             return ()
                    | k == Vty.KEsc -> do
                     actPage' <- use actPage
-                    liftIO $ modifyIORef globStateRef (& paused %~ not)
                     if actPage' == Nothing
                     then do
                         slctPage' <- toEnum @Page <$> use slctMenuItemIx
                         actPage .= Just slctPage'
                         liftIO $ do
-                            modifyIORef globStateRef (& paused .~ False)
+                            modifyIORef globStateRef
+                                        $ ((& paused .~ False)
+                                           . (& started .~ False)
+                                          )
                     else do
                         actPage .= Nothing
                    | k `elem` [Vty.KChar 'w', Vty.KUp] -> do
@@ -555,7 +556,7 @@ hndlEv globStateRef parser = do
                  return ()
 
 initLocState :: CoreState -> [(PlayerSignal, [Binding])] -> LocState
-initLocState coreState kBinds' = LocState Nothing kBinds' False 0 coreState
+initLocState coreState kBinds' = LocState Nothing kBinds' False False 0 coreState
 
 defKBinds :: [(PlayerSignal, [Binding])]
 defKBinds
@@ -624,29 +625,6 @@ salvageChar = do
          . unPosition
          . _2
          .= fromIntegral nearestPassCellIx
-
-getCoreState :: Parser p
-             => Proxy p
-             -> TrackState
-             -> ReaderT Configuration IO CoreState
-getCoreState prsr trackState = do
-    initCoreState' <- initCoreState trackState
-    liftIO $ do
-        savExists <- doesFileExist savFileName
-        if savExists
-        then do
-            sav <- readFile savFileName
-            case deserialiseCoreState prsr $ ByteString.pack sav of
-                Just savCoreState -> return savCoreState
-                Nothing -> return initCoreState'
-        else do
-            return initCoreState'
-
-initCoreState :: TrackState -> ReaderT Configuration IO CoreState
-initCoreState trackState = do
-    initCharPos <- spawn
-    charHP <- asks (^. options . characterHitPoints)
-    return $ CoreState (CharacterState charHP initCharPos) 0 trackState
 
 savFileName :: String
 savFileName = ".curr-rac-prog.sav"

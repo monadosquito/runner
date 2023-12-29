@@ -42,7 +42,12 @@ main :: IO ()
 main = runApp $ do
     prefs <- getPreferences (Proxy @Env) $ Proxy @Aeson
     let conf = Configuration prefs defaultOptions
-    liftIO $ runReaderT (DriverPort.run (Proxy @Driver) $ Proxy @Aeson) conf
+    coreState <- runReaderT (getCoreState (Proxy @Env) $ Proxy @Aeson) conf
+    liftIO $ runReaderT (DriverPort.run (Proxy @Driver)
+                                        (Proxy @Aeson)
+                                        coreState
+                        )
+                        conf
 
 #if defined(CONS)
 runApp :: IO () -> IO ()

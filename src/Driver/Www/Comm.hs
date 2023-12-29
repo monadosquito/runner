@@ -30,11 +30,14 @@ data Act = Act Action | MisoAct MisoAct
 data Mdl = Mdl { _core :: CoreState
                , _flow :: FlowState
                , _kBinds :: Map PlayerSignal Int
+               , _trackBodyPassed :: Bool
                } deriving Eq
-
 
 prefsStorItemName :: String
 prefsStorItemName = "prefs"
+
+currRacStorItemName :: String
+currRacStorItemName = "curr-rac"
 
 
 makeFieldsNoPrefix ''Mdl

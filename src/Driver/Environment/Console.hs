@@ -18,13 +18,23 @@ import Core.Script.Track
 
 import Core.Port.Parser
 
+import Core.Core
+import Core.Track.Configuration.Configuration
+import Core.Track.Track
+
+import Control.Lens
+import Control.Monad.IO.Class
+import Control.Monad.Reader
+import Data.Map
+import System.Directory
+import System.Random
+
 
 data Console
 instance Environment Console IO where
     getPreferences _ parser = do
         let readPrefs prefs' = Preferences
-                             <$> strOption (completeWith (map fst tracks)
-                                            <> long "track-name"
+                             <$> strOption (long "track-name"
                                             <> metavar "STRING"
                                             <> short 't'
                                             <> value (_trackName prefs')
@@ -49,3 +59,24 @@ instance Environment Console IO where
                  . const
                  $ pure defaultPreferences
         execParser $ info (readPrefs fileConf <**> helper) fullDesc
+    getCoreState _ parser = do
+        conf <- ask
+        currTrackName <- asks (^. preferences . trackName)
+        gen <- liftIO newStdGen
+        let currTrack = tracks' ! currTrackName
+            interpret'' = configure conf
+            initTrackState = interpret'' currTrack gen & rows %~ reverse
+        initCoreState <- initialiseCoreState initTrackState
+        liftIO $ do
+            savExists <- doesFileExist savFileName
+            if savExists
+            then do
+                sav <- ByteString.readFile savFileName
+                case deserialiseCoreState parser sav of
+                    Just savCoreState -> return savCoreState
+                    Nothing -> return initCoreState
+            else do
+                return initCoreState
+
+savFileName :: String
+savFileName = ".curr-rac-prog.sav"

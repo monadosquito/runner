@@ -56,7 +56,7 @@ newtype Offset = Offset (ColumnIndex, ColumnIndex)
 
 
 data Cell = Obstacle | TrailPart | Pass | Character | LivingEnemy | DeadEnemy
-          deriving Eq
+          deriving (Eq, Show)
 
 data GenerationState = GenerationState { _generator :: StdGen
                                        , _eitherSequences :: [Track]

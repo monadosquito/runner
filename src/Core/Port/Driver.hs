@@ -11,6 +11,12 @@ import Data.Proxy
 
 import Core.Port.Parser
 
+import Core.Core
+
 
 class Driver d where
-    run :: Parser p => Proxy d -> Proxy p -> ReaderT Configuration IO ()
+    run :: Parser p
+        => Proxy d
+        -> Proxy p
+        -> CoreState
+        -> ReaderT Configuration IO ()

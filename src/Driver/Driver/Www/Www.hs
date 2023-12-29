@@ -59,6 +59,8 @@ import Driver.Driver.Www.Js
 
 import Driver.Parser.Aeson ()
 
+import qualified Miso.String as Ms
+
 
 data WwwState = WwwState { _drawTrackPiece :: [[Cell]] -> JSM ()
                          , _moveChar :: Int -> Int -> JSM ()
@@ -71,22 +73,22 @@ makeFieldsNoPrefix ''WwwState
 
 data Www
 instance Driver Www where
-    run _ _ = do
+    run _ _ coreState = do
         conf <- ask
         initGlobState <- initialiseGlobalState
         (globStateRef, wwwStateRef) <- liftIO $ do
             threadDelay 20000
-            globStateRef <- newIORef initGlobState
+            let trackRowsCnt = coreState ^. track . rows . to length
+            globStateRef <- newIORef $ initGlobState & trackRowsCount
+                                                     .~ trackRowsCnt
             wwwStateRef <- newIORef initWwwState
             return (globStateRef, wwwStateRef)
         flowSub <- mkFlowSub globStateRef wwwStateRef
-        initTrackState <- initialiseTrackState
-        initCoreState <- initialiseCoreState initTrackState
         lift $ do
             let events = defaultEvents
                 initialAction = MisoAct Initialise
                 logLevel = Off
-                model = Mdl initCoreState initGlobState Map.empty
+                model = Mdl coreState initGlobState Map.empty False
                 mountPoint = Nothing
                 subs = [flowSub, keyboardSub $ MisoAct . HandleKs]
                 update = fromTransition
@@ -144,7 +146,7 @@ mkFlowSub :: Monad m
 mkFlowSub globStateRef _ = do
     currFlow <- flow1
     return $ \sink -> void . liftIO . forkIO $ do
-        threadDelay 100000
+        threadDelay 200000
         runFlow globStateRef sink currFlow
 
 runFlow :: IORef FlowState -> (Act -> IO ()) -> Flow r n -> IO ()
@@ -257,11 +259,27 @@ upd globStateRef wwwStateRef (MisoAct (HandleKs ks)) = do
     if | playerWantsPause -> lift . scheduleIO . liftIO $ do
         modifyIORef globStateRef (& paused %~ not)
         return $ MisoAct TogglePauseMode
-       | playerWantsQuit -> lift . scheduleIO . liftIO $ do
-        FlowState {..} <- readIORef globStateRef
-        maybe (return ()) killThread _flowThreadId
-        maybe (return ()) killThread _sessionThreadId
-        return $ MisoAct Pause'
+       | playerWantsQuit -> lift $ do
+        currCoreState <- use core
+        scheduleIO . liftIO $ do
+            FlowState {..} <- readIORef globStateRef
+            maybe (return ()) killThread _flowThreadId
+            maybe (return ()) killThread _sessionThreadId
+            let charRow = currCoreState
+                        ^. character
+                        . position
+                        . unPosition
+                        . _1
+                        . to (fromIntegral @Natural @Int)
+                savedCoreState = currCoreState & character . position
+                                                           . unPosition
+                                                           . _1
+                                                           .~ 0
+                                               & track . rows %~ (drop charRow)
+            setLocalStorage @CoreState
+                            (Ms.ms currRacStorItemName)
+                            savedCoreState
+            return $ MisoAct Pause'
        | otherwise -> do
         paused' <- use (flow . paused)
         trackPassed <- use (core . track . rows . to ((== 0) . length))
@@ -342,7 +360,7 @@ upd globStateRef wwwStateRef (MisoAct (HandleKs ks)) = do
                             _render'
                 | otherwise -> do
                     return ()
-upd _ wwwStateRef (MisoAct Initialise) = do
+upd globStateRef wwwStateRef (MisoAct Initialise) = do
     conf <- ask
     trackPartCap <- asks (^. preferences
                           . trackPieceCapacity
@@ -426,6 +444,7 @@ upd _ wwwStateRef (MisoAct Initialise) = do
                     render''
                 Nothing -> do
                     return ()
+            liftIO $ modifyIORef globStateRef (& started .~ False)
             kBinds' <- either (const defKBinds) id
                     <$> getLocalStorage @(Map.Map PlayerSignal Int) "k-binds"
             return $ MisoAct (SetKBinds kBinds')
@@ -442,7 +461,16 @@ upd globStateRef wwwStateRef (Act (Refresh gen)) = do
         initTrackState = interpret'' currTrack gen & rows %~ reverse
     initCoreState <- initialiseCoreState initTrackState
     lift $ do
-        core .= initCoreState
+        trackBodyPassed' <- use trackBodyPassed
+        trackBodyPassed .= True
+        when trackBodyPassed' $ do
+            scheduleIO_ . liftIO $ modifyIORef globStateRef
+                        (& trackRowsCount
+                         .~ initTrackState
+                         ^. rows
+                         . to length
+                        )
+            core .= initCoreState
         core . track
              . rows
              %= (\(part, rest)
@@ -451,14 +479,7 @@ upd globStateRef wwwStateRef (Act (Refresh gen)) = do
                 . splitAt (trackPieceCap - 1)
         currTrackPiece <- use (core . track . rows . to (take trackPieceCap))
         scheduleIO_ $ do
-            WwwState {..} <- liftIO $ do
-                modifyIORef globStateRef
-                            (& trackRowsCount
-                             .~ initTrackState
-                             ^. rows
-                             . to length
-                            )
-                readIORef wwwStateRef
+            WwwState {..} <- liftIO $ readIORef wwwStateRef
             _drawTrackPiece currTrackPiece
 upd _ wwwStateRef (Act ReturnCharacter) = do
     conf <- ask
@@ -472,7 +493,7 @@ upd _ wwwStateRef (Act ReturnCharacter) = do
             WwwState {..} <- liftIO $ readIORef wwwStateRef
             _moveChar charXPos charZPos
             _render'
-upd _ _ (MisoAct (SetKBinds kBinds')) = lift $ kBinds .= kBinds'
+upd _ _ (MisoAct (SetKBinds kBinds')) = kBinds .= kBinds'
 upd globStateRef wwwStateRef (Act (Signal (FlowSignal Progress))) = do
     conf <- ask
     let sig = FlowSignal Progress
