@@ -64,7 +64,10 @@ reflect (PlayerSignal signal)
         (State previousChararacterState previousScore previousTrackState)
     = do
     if | signal `elem` [StrafeLeft, StrafeRight] -> do
-        let strafeSide = signalToSide signal
+        let strafeSide = case signal of
+                             StrafeLeft -> Left'
+                             StrafeRight -> Right'
+                             _ -> error "undefined side"
         nextCharacterPosition <- strafe strafeSide
                                         $ Character._position previousChararacterState
         let nextCharacterState = Character.obstruct nextCharacterPosition
@@ -86,7 +89,11 @@ reflect (PlayerSignal signal)
         return $ State nextCharacterState previousScore nextTrackState
        | signal `elem` [SwingLeft, SwingRight] -> do
         enemyKillingScoreBonus' <- asks (^. options . enemyKillingScoreBonus)
-        let swingSide = fromEnum $ signalToSide signal
+        -- let swingSide = fromEnum $ signalToSide signal
+        let swingSide = case signal of
+                            SwingLeft -> -1
+                            SwingRight -> 1
+                            _ -> 0
             hitCell = previousColumn + swingSide
             hitObject = previousTrackState
                         ^? Track.rows
