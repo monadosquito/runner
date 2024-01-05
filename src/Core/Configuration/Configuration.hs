@@ -27,7 +27,7 @@ data Configuration = Configuration { _preferences :: Preferences
 data Preferences = Preferences { _trackName :: TrackName
                                , _configurationFilePath :: FilePath
                                , _trackPieceCapacity :: TrackPieceCapacity
-                               }
+                               } deriving (Eq, Show)
 
 data Options = Options { _trackWidth :: TrackWidth
                        , _trackDifficultyLevel :: TrackDifficultyLevel
@@ -56,7 +56,7 @@ defaultConfiguration = Configuration { _preferences = defaultPreferences
                                      }
 
 defaultOptions :: Options
-defaultOptions = Options { _trackWidth = 5
+defaultOptions = Options { _trackWidth = 11
                          , _trackDifficultyLevel = _trackWidth defaultOptions
                                                  `div` 2
                          , _trackStartPartLength = 3

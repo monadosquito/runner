@@ -13,4 +13,4 @@ class Parser p where
     deserialiseConfiguration :: Proxy p -> ByteString -> Configuration
     serialiseCoreState :: Proxy p -> CoreState -> ByteString
     deserialiseCoreState :: Proxy p -> ByteString -> Maybe CoreState
-    deserialisePreferences :: Proxy p -> ByteString -> Preferences
+    deserialisePreferences :: Proxy p -> ByteString -> Maybe Preferences

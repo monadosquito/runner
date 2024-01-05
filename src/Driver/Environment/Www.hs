@@ -31,8 +31,6 @@ import Control.Monad.Reader
 import Data.Map
 import System.Random
 
-import Driver.Www.Comm
-
 
 #ifdef __GHCJS__
 type IO' = IO
@@ -46,10 +44,12 @@ instance Environment Www IO' where
     getPreferences _ parser = do
         win <- currentWindowUnchecked
         stor <- getLocalStorage win
-        prefs <- maybe defaultPreferences
-                       (deserialisePreferences parser . BS.pack)
-              <$> getItem @JSM @String stor prefsStorItemName
-        return prefs
+        prefs' <- maybe defaultPreferences
+                        (maybe defaultPreferences id
+                         . deserialisePreferences parser . BS.pack
+                        )
+               <$> getItem @JSM @String stor prefsStorItemName
+        return prefs'
     getCoreState _ parser = do
         conf <- ask
         currTrackName <- asks (^. preferences . trackName)

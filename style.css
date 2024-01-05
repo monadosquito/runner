@@ -1,0 +1,109 @@
+body {
+    margin: 0;
+}
+
+.canv {
+    position: absolute;
+}
+
+.canv_hidden {
+    display: none;
+}
+
+.input {
+    display: flex;
+    justify-content: space-between;
+    width: 100%;
+}
+
+.input_bound::after {
+    content: '?';
+}
+
+.input__field {
+    -moz-box-sizing: border-box;
+    -ms-box-sizing: border-box;
+    -webkit-box-sizing: border-box; 
+    box-sizing: border-box;
+    width: 40%;
+}
+
+.input__key-code {
+    display: inline;
+}
+
+.input__key-code_hidden {
+    display: none;
+}
+
+.menu {
+    display: flex;
+    align-items: center;
+    flex-direction: column;
+    justify-content: center;
+    list-style: none;
+    margin-left: auto;
+    margin-right: auto;
+    padding: 0px;
+}
+
+.menu__btn {
+    width: 140px; 
+}
+
+.page__cap {
+    text-align: center;
+}
+
+.page__menu {
+    width: 50vw;
+    height: 85vh;
+}
+
+.page__btn {
+    display: block;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.rac-page {
+    display: flex;
+    flex-direction: column;
+    align-content: center;
+    justify-content: space-between;
+    position: absolute;
+    z-index: 1;
+    padding: 1vh 2vw;
+    width: 96vw;
+    height: 98vh;
+}
+
+.rac-page__shield {
+    width: 20px;
+    height: 20px;
+}
+
+.rac-page__shields {
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.score {
+    color: gold;
+    font-size: 4vh;
+    text-align: center;
+}
+
+.shields {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 1vh;
+}
+
+.shield {
+    background-color: skyblue;
+    border-radius: 15% 15% 55% 55% / 15% 15% 100% 100%;
+    display: inline-block;
+    opacity: 0.5;
+}

@@ -8,6 +8,8 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE ViewPatterns #-}
 
 
 module Driver.Driver.Www.Www where
@@ -15,7 +17,7 @@ module Driver.Driver.Www.Www where
 
 import Core.Port.Driver
 
-import Miso hiding ((<#), JSM)
+import Miso hiding ((<#), JSM, at)
 
 import Core.Character.Character
 import Core.Configuration.Configuration
@@ -29,7 +31,7 @@ import Core.Track.Track
 import Core.Script.Flow.Flow1
 import Core.Script.Track
 
-import Driver.Driver.Www.View.Main
+import Driver.Driver.Www.View
 import Driver.Www.Comm
 
 import Control.Concurrent
@@ -47,6 +49,7 @@ import GHCJS.DOM.Window hiding (getLocalStorage)
 #ifndef __GHCJS__
 import Language.Javascript.JSaddle
 import Language.Javascript.JSaddle.Warp
+import Network.Wai.Application.Static
 #endif
 import Numeric.Natural
 import "ghcjs-dom" GHCJS.DOM.Document
@@ -59,6 +62,10 @@ import Driver.Driver.Www.Js
 
 import Driver.Parser.Aeson ()
 
+import Data.Proxy
+import GHCJS.DOM.Element
+import GHCJS.DOM.HTMLLinkElement
+import GHCJS.DOM.ParentNode
 import qualified Miso.String as Ms
 
 
@@ -75,7 +82,8 @@ data Www
 instance Driver Www where
     run _ _ coreState = do
         conf <- ask
-        initGlobState <- initialiseGlobalState
+        initGlobState <- initialiseFlowState
+        prefs'' <- asks _preferences
         (globStateRef, wwwStateRef) <- liftIO $ do
             threadDelay 20000
             let trackRowsCnt = coreState ^. track . rows . to length
@@ -88,9 +96,20 @@ instance Driver Www where
             let events = defaultEvents
                 initialAction = MisoAct Initialise
                 logLevel = Off
-                model = Mdl coreState initGlobState Map.empty False
+                initUri = mkUri (Proxy @Api) $ Proxy @MainMenu
+                model = Mdl coreState
+                            initGlobState
+                            Map.empty
+                            False
+                            Nothing
+                            prefs''
+                            initUri
+                            initUri
                 mountPoint = Nothing
-                subs = [flowSub, keyboardSub $ MisoAct . HandleKs]
+                subs = [ flowSub
+                       , keyboardSub $ MisoAct . HandleKs
+                       , uriSub $ MisoAct . HandleUri
+                       ]
                 update = fromTransition
                        . (`runReaderT` conf)
                        . upd globStateRef wwwStateRef
@@ -252,114 +271,169 @@ upd globStateRef wwwStateRef (MisoAct (HandleKs ks)) = do
                            . trackPieceCapacity
                            . to (fromIntegral @Natural @Int)
                           )
-    kBinds' <- lift $ use kBinds
-    let currPlayerSigs = Map.keys $ Map.filter (`elem` (Set.toList ks)) kBinds'
+    kBinds'' <- lift $ use kBinds
+    let currPlayerSigs = Map.keys $ Map.filter (`elem` (Set.toList ks)) kBinds''
         playerWantsPause = Pause `elem` currPlayerSigs 
         playerWantsQuit = Quit `elem` currPlayerSigs
-    if | playerWantsPause -> lift . scheduleIO . liftIO $ do
-        modifyIORef globStateRef (& paused %~ not)
-        return $ MisoAct TogglePauseMode
-       | playerWantsQuit -> lift $ do
-        currCoreState <- use core
-        scheduleIO . liftIO $ do
-            FlowState {..} <- readIORef globStateRef
-            maybe (return ()) killThread _flowThreadId
-            maybe (return ()) killThread _sessionThreadId
-            let charRow = currCoreState
-                        ^. character
-                        . position
-                        . unPosition
-                        . _1
-                        . to (fromIntegral @Natural @Int)
-                savedCoreState = currCoreState & character . position
-                                                           . unPosition
-                                                           . _1
-                                                           .~ 0
-                                               & track . rows %~ (drop charRow)
-            setLocalStorage @CoreState
-                            (Ms.ms currRacStorItemName)
-                            savedCoreState
-            return $ MisoAct Pause'
-       | otherwise -> do
-        paused' <- use (flow . paused)
-        trackPassed <- use (core . track . rows . to ((== 0) . length))
-        when (not paused' && not trackPassed) $ do
-            let playerWantsStrafe = StrafeLeft `elem` currPlayerSigs
-                                  || StrafeRight `elem` currPlayerSigs
-                playerWantsSwing = SwingLeft `elem` currPlayerSigs
-                                 || SwingRight `elem` currPlayerSigs
-            if | playerWantsStrafe -> do
-                let currStrafePlayerSig | StrafeLeft `elem` currPlayerSigs
-                                        = StrafeLeft
-                                        | StrafeRight `elem` currPlayerSigs
-                                        = StrafeRight
-                                        | otherwise
-                                        = error "undefined strafe signal"
-                    currStrafeSig = PlayerSignal currStrafePlayerSig
-                prevCoreState <- lift $ use core
-                nextCoreState <- reflect currStrafeSig prevCoreState
-                lift $ do
-                    prevCharCol <- use (core
-                                        . character
-                                        . position
-                                        . unPosition
-                                        . _2
-                                       )
-                    core .= nextCoreState
-                    nextCharCol <- use (core
-                                        . character
-                                        . position
-                                        . unPosition
-                                        . _2
-                                       )
-                    (charRow, charCol) <- bimap (fromIntegral @Natural @Int)
-                                                (fromIntegral @Natural @Int)
-                                       <$> use (core
+        playerWantsConfirm = Confirm `elem` currPlayerSigs
+    boundPlayerSig' <- use boundPlayerSig
+    case boundPlayerSig' of
+        Nothing -> do
+            if | playerWantsPause -> lift $ do
+                currUri <- use uri
+                selectedPageUri' <- use selectedPageUri
+                let mainMenuUri = mkUri (Proxy @Api) $ Proxy @MainMenu
+                    inMainMenu = currUri == mainMenuUri
+                scheduleIO_ $ do
+                    _ <- liftIO $ do
+                        modifyIORef globStateRef (& paused %~ not)
+                        return $ MisoAct TogglePauseMode
+                    canv <- uncheckedCastTo HTMLCanvasElement
+                         <$> getElementById "canv"
+                    let canvClassName | inMainMenu = "canv"
+                                      | otherwise = "canv canv_hidden" :: String
+                    setClassName canv canvClassName
+                if inMainMenu
+                then do
+                    uri .= selectedPageUri'
+                else do
+                    selectedPageUri .= currUri
+                    uri .= mainMenuUri
+               | playerWantsQuit -> lift $ do
+                currCoreState <- use core
+                scheduleIO $ do
+                    liftIO $ do
+                        FlowState {..} <- readIORef globStateRef
+                        maybe (return ()) killThread _flowThreadId
+                        maybe (return ()) killThread _sessionThreadId
+                    let charRow = currCoreState
+                                ^. character
+                                . position
+                                . unPosition
+                                . _1
+                                . to (fromIntegral @Natural @Int)
+                        savedCoreState = currCoreState & character . position
+                                                                   . unPosition
+                                                                   . _1
+                                                                   .~ 0
+                                                       & track . rows
+                                                               %~ (drop charRow)
+                    setLocalStorage @CoreState
+                                    (Ms.ms currRacStorItemName)
+                                    savedCoreState
+                    return $ MisoAct Pause'
+               | playerWantsConfirm -> do
+                boundPlayerSig .= Nothing
+               | otherwise -> do
+                paused' <- use (flow . paused)
+                trackPassed <- use (core . track . rows . to ((== 0) . length))
+                when (not paused' && not trackPassed) $ do
+                    let playerWantsStrafe = StrafeLeft `elem` currPlayerSigs
+                                          || StrafeRight `elem` currPlayerSigs
+                        playerWantsSwing = SwingLeft `elem` currPlayerSigs
+                                         || SwingRight `elem` currPlayerSigs
+                    if | playerWantsStrafe -> do
+                        let currStrafePlayerSig | StrafeLeft
+                                                  `elem` currPlayerSigs
+                                                = StrafeLeft
+                                                | StrafeRight
+                                                  `elem` currPlayerSigs
+                                                = StrafeRight
+                                                | otherwise
+                                                = error "undefined strafe signal"
+                            currStrafeSig = PlayerSignal currStrafePlayerSig
+                        prevCoreState <- lift $ use core
+                        nextCoreState <- reflect currStrafeSig prevCoreState
+                        lift $ do
+                            prevCharCol <- use (core
                                                 . character
                                                 . position
                                                 . unPosition
+                                                . _2
                                                )
-                    charHP <- use (core . character . hitPoints)
-                    scheduleIO_ $ do
-                        WwwState {..} <- liftIO $ do
-                            let charMoved = prevCharCol /= nextCharCol
-                            modifyIORef globStateRef
-                                        (& characterStuck .~ not charMoved)
-                            let charDead = charHP == 0
-                            when charDead $ do
-                                modifyIORef globStateRef
-                                            $ (& characterStuck .~ False)
-                                              . (& paused .~ False)
-                                              . (& started .~ False)
-                            readIORef wwwStateRef
-                        let (charXPos, charZPos) = cellToPos conf
-                                                             charRow
-                                                             charCol
-                        _moveChar charXPos charZPos
-                        _render'
-                | playerWantsSwing -> do
-                    let currSwingPlayerSig | SwingLeft `elem` currPlayerSigs
-                                           = SwingLeft
-                                           | SwingRight `elem` currPlayerSigs
-                                           = SwingRight
-                                           | otherwise
-                                           = error "undefined swing signal"
-                        currSwingSig = PlayerSignal currSwingPlayerSig
-                    prevCoreState <- lift $ use core
-                    nextCoreState <- reflect currSwingSig prevCoreState
-                    lift $ do
-                        core .= nextCoreState
-                        currTrackPiece <- use (core
-                                               . track
-                                               . rows
-                                               . to (take trackPieceCap)
-                                              )
-                        scheduleIO_ $ do
-                            WwwState {..} <- liftIO $ readIORef wwwStateRef
-                            _drawTrackPiece currTrackPiece
-                            _render'
-                | otherwise -> do
-                    return ()
+                            core .= nextCoreState
+                            nextCharCol <- use (core
+                                                . character
+                                                . position
+                                                . unPosition
+                                                . _2
+                                               )
+                            (charRow, charCol) <- bimap (fromIntegral @Natural
+                                                                      @Int
+                                                        )
+                                                        (fromIntegral @Natural
+                                                                      @Int
+                                                        )
+                                               <$> use (core
+                                                        . character
+                                                        . position
+                                                        . unPosition
+                                                       )
+                            charHP <- use (core . character . hitPoints)
+                            scheduleIO_ $ do
+                                WwwState {..} <- liftIO $ do
+                                    let charMoved = prevCharCol /= nextCharCol
+                                    modifyIORef globStateRef
+                                                (& characterStuck
+                                                 .~ not charMoved
+                                                )
+                                    let charDead = charHP == 0
+                                    when charDead $ do
+                                        modifyIORef globStateRef
+                                                    $ (& characterStuck .~ False)
+                                                      . (& paused .~ False)
+                                                      . (& started .~ False)
+                                    readIORef wwwStateRef
+                                let (charXPos, charZPos) = cellToPos conf
+                                                                     charRow
+                                                                     charCol
+                                _moveChar charXPos charZPos
+                                _render'
+                        | playerWantsSwing -> do
+                            let currSwingPlayerSig | SwingLeft
+                                                     `elem` currPlayerSigs
+                                                   = SwingLeft
+                                                   | SwingRight
+                                                     `elem` currPlayerSigs
+                                                   = SwingRight
+                                                   | otherwise
+                                                   = error "undefined swing signal"
+                                currSwingSig = PlayerSignal currSwingPlayerSig
+                            prevCoreState <- lift $ use core
+                            nextCoreState <- reflect currSwingSig prevCoreState
+                            lift $ do
+                                core .= nextCoreState
+                                currTrackPiece <- use (core
+                                                       . track
+                                                       . rows
+                                                       . to (take trackPieceCap)
+                                                      )
+                                scheduleIO_ $ do
+                                    WwwState {..} <- liftIO
+                                                  $ readIORef wwwStateRef
+                                    _drawTrackPiece currTrackPiece
+                                    _render'
+                        | otherwise -> do
+                            return ()
+        Just boundPlayerSig'' -> do
+            let rebindCancelled = Pause `elem` currPlayerSigs
+                specKPressed = Confirm `elem` currPlayerSigs
+                             || Pause `elem` currPlayerSigs
+                             || Quit `elem` currPlayerSigs
+            when rebindCancelled $ boundPlayerSig .= Nothing
+            when (not specKPressed) $ do
+                let ks' = Set.toList ks
+                case ks' of
+                    (k:_) -> do
+                        kBinds . at boundPlayerSig'' . _Just .= k
+                        boundPlayerSig .= Nothing
+                    _ -> do
+                        return ()
+                newKBinds <- use kBinds
+                lift . scheduleIO_
+                     $ setLocalStorage @(Map.Map PlayerSignal Int)
+                                       "k-binds"
+                                       newKBinds
 upd globStateRef wwwStateRef (MisoAct Initialise) = do
     conf <- ask
     trackPartCap <- asks (^. preferences
@@ -372,9 +446,7 @@ upd globStateRef wwwStateRef (MisoAct Initialise) = do
             liftIO $ threadDelay 100000
             doc <- currentDocumentUnchecked
             body <- getBodyUnchecked doc
-            canv <- uncheckedCastTo HTMLCanvasElement
-                 <$> createElement doc ("canvas" :: String)
-            _ <- appendChild body canv
+            canv <- querySelector body ("#canv" :: String)
             jsCanv <- toJSVal canv
             win <- currentWindowUnchecked
             innH <- fromIntegral @Int @Float <$> getInnerHeight win
@@ -384,9 +456,9 @@ upd globStateRef wwwStateRef (MisoAct Initialise) = do
             setName' trackGrp "track"
             add scene trackGrp
             cam <- newCam 75 (innW / innH) 0.1 1000
-            setAxRot cam "x" $ -pi / 2
-            setAxPos cam "y" $ 20
-            setAxRot cam "z" $ 0
+            setAxRot cam "x" $ -pi / 4
+            setAxPos cam "y" $ 10
+            setAxPos cam "z" $ 10
             let halfTrackPartCap = trackPartCap `div` 2
             renderer <- newWebglRenderer jsCanv
             setSize renderer innW innH
@@ -445,13 +517,13 @@ upd globStateRef wwwStateRef (MisoAct Initialise) = do
                 Nothing -> do
                     return ()
             liftIO $ modifyIORef globStateRef (& started .~ False)
-            kBinds' <- either (const defKBinds) id
-                    <$> getLocalStorage @(Map.Map PlayerSignal Int) "k-binds"
-            return $ MisoAct (SetKBinds kBinds')
+            kBinds'' <- either (const defKBinds) id
+                     <$> getLocalStorage @(Map.Map PlayerSignal Int) "k-binds"
+            return $ MisoAct (SetKBinds kBinds'')
 upd _ _ (MisoAct Pause') = lift $ flow . paused .= True 
 upd globStateRef wwwStateRef (Act (Refresh gen)) = do
     conf <- ask
-    currTrackName <- asks (^. preferences . trackName)
+    currTrackName <- use $ core . track . name
     trackPieceCap <- asks (^. preferences
                            . trackPieceCapacity
                            . to (fromIntegral @Natural @Int)
@@ -493,7 +565,7 @@ upd _ wwwStateRef (Act ReturnCharacter) = do
             WwwState {..} <- liftIO $ readIORef wwwStateRef
             _moveChar charXPos charZPos
             _render'
-upd _ _ (MisoAct (SetKBinds kBinds')) = kBinds .= kBinds'
+upd _ _ (MisoAct (SetKBinds kBinds'')) = kBinds .= kBinds''
 upd globStateRef wwwStateRef (Act (Signal (FlowSignal Progress))) = do
     conf <- ask
     let sig = FlowSignal Progress
@@ -533,13 +605,60 @@ upd globStateRef wwwStateRef (Act (Signal (FlowSignal Progress))) = do
             _render'
 upd _ _ (Act (Signal (PlayerSignal _))) = pure ()
 upd _ _ (MisoAct TogglePauseMode) = flow . paused %= not
+upd _ _ (MisoAct (AlterTrackPieceCap "")) = pure ()
+upd _ _ (MisoAct (AlterTrackPieceCap trackPieceCap')) = do
+    prefs . trackPieceCapacity .= trackPieceCap
+    newPrefs <- use $ prefs
+    lift . scheduleIO_ $ setLocalStorage @Preferences "prefs" newPrefs
+  where
+    trackPieceCap = read @Natural $ Ms.fromMisoString @String trackPieceCap'
+upd globStateRef _ (MisoAct (ChangeUri uri')) = do
+    uri .= uri'
+    lift . scheduleIO_ $ do
+        canv <- uncheckedCastTo HTMLCanvasElement <$> getElementById "canv"
+        let racUri = mkUri (Proxy @Api) $ Proxy @Rac
+            canvClassName = if uri' == racUri
+                            then "canv"
+                            else "canv canv_hidden" :: String
+        setClassName canv canvClassName
+        when (uri' == racUri) . liftIO $ do
+            modifyIORef globStateRef (& started .~ False)
+upd _ _ (MisoAct (HandleUri uri')) = uri .= uri'
+upd _ _ (MisoAct RestDefKBinds) = do
+    lift . scheduleIO_ $ removeLocalStorage "k-binds"
+upd _ _ (MisoAct RestDefPrefs) = lift . scheduleIO_ $ removeLocalStorage "prefs"
+upd _ _ (MisoAct (SelectTrack (Ms.fromMisoString -> trackName'))) = do
+    conf <- ask
+    core . track . name .= trackName'
+    lift . scheduleIO_ $ do
+        gen <- liftIO Rand.newStdGen
+        let currTrack = tracks' Map.! trackName'
+            interpret'' = configure conf
+            initTrackState = interpret'' currTrack gen & name .~ trackName'
+                                                       & rows %~ reverse
+            initCoreState = runReader (initialiseCoreState initTrackState) conf
+        setLocalStorage @CoreState
+                        (Ms.ms currRacStorItemName)
+                        initCoreState
+upd _ _ (MisoAct (WaitNewK playerSig)) = boundPlayerSig .= Just playerSig
 
 #ifdef __GHCJS__
 runApp :: IO () -> IO ()
 runApp = id
 #else
 runApp :: JSM () -> IO ()
-runApp f = debugOr 8000 (f >> syncPoint) jsaddleApp
+runApp f = debugOr 8000 (inclCss >> f >> syncPoint)
+         . staticApp
+         $ defaultWebAppSettings "./"
+  where
+    inclCss = do
+        doc <- currentDocumentUnchecked
+        link <- uncheckedCastTo HTMLLinkElement
+             <$> createElement doc ("link" :: String)
+        setHref link ("style.css" :: String)
+        setRel link ("stylesheet" :: String)
+        body <- getBodyUnchecked doc
+        appendChild body link
 #endif
 
 defKBinds :: Map.Map PlayerSignal Int
@@ -551,4 +670,5 @@ defKBinds
                  , (StrafeRight, 76)
                  , (Pause, 27)
                  , (Quit, 81)
+                 , (Confirm, 13)
                  ]

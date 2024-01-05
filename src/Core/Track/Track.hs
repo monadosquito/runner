@@ -401,6 +401,8 @@ interpret' (Free track') = do
                                                                    previousGenerator
                     generator .= nextGenerator
                     interpret' $ staticLengthFinitePart length'
+                _ -> do
+                    return ()
         Just EitherSequence -> do
             eitherSequences . _head %= (*> Free (Pure () <$ track'))
         Just (RepeatedSequence _) -> do

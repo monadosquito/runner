@@ -7,7 +7,7 @@ license: MIT
 license-file: LICENSE
 maintainer: monadosquito@gmail.com
 name: runner
-version: 1.1.0
+version: 1.2.0
 
 executable runner
     build-depends:
@@ -25,7 +25,8 @@ executable runner
         miso
     if impl(ghcjs)
         build-depends:
-            ghcjs-base
+            ghcjs-base,
+            servant
     else
         build-depends:
             jsaddle,
@@ -63,11 +64,16 @@ executable runner
         Core.Port.Driver,
         Driver.Driver.Brick,
         Core.Core,
-        Driver.Driver.Www.View.Main,
-        Driver.Driver.Www.Www,
         Driver.Www.Comm,
         Core.Flow.Flow,
-        Core.Script.Flow.Flow1
+        Core.Script.Flow.Flow1,
+        Driver.Driver.Www.View.KBinds,
+        Driver.Driver.Www.View.MainMenu,
+        Driver.Driver.Www.View.NotFound,
+        Driver.Driver.Www.View.Prefs,
+        Driver.Driver.Www.View.Rac,
+        Driver.Driver.Www.View,
+        Driver.Driver.Www.Www
     if flag(cons) && !flag(dry-run)
         cpp-options: -DCONS
     if flag(cons) && flag(dry-run)

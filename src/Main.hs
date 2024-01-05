@@ -37,7 +37,6 @@ type Driver = Driver.Www
 type Env = Env.Www
 #endif
 
-
 main :: IO ()
 main = runApp $ do
     prefs <- getPreferences (Proxy @Env) $ Proxy @Aeson

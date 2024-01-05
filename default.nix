@@ -23,10 +23,14 @@ in
         dryRunWwwRunner = nixpkgs.haskell.lib.enableCabalFlag
                               wwwRunner
                               "dry-run";
+        inclCss = nixpkgs.lib.readFile ./scr/incl-css.sh;
+        wwwRunnerWithCss = wwwRunner.overrideAttrs (prev: {
+            installPhase = prev.installPhase + inclCss;
+        });
     in
     {
         cons = consRunner;
         dry-run-cons = dryRunConsRunner;
-        www = wwwRunner;
+        www = wwwRunnerWithCss;
         dry-run-www = dryRunWwwRunner;
     }

@@ -7,7 +7,16 @@ data PlayerSignal = StrafeLeft
                   | SwingRight
                   | Pause
                   | Quit
-                  deriving (Enum, Eq, Read, Show, Bounded, Ord)
+                  | Confirm
+                  deriving (Enum, Eq, Read, Bounded, Ord)
+instance Show PlayerSignal where
+    show StrafeLeft = "Strafe Left"
+    show StrafeRight = "Strafe Right"
+    show SwingLeft = "Swing Left"
+    show SwingRight = "Swing Right"
+    show Pause = "Pause"
+    show Quit = "Quit"
+    show Confirm = "Confirm"
 
 data FlowSignal = Progress
 
