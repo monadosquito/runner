@@ -274,3 +274,9 @@ objects
 |a pass        |`,`, `.`|none                                         |
 |an obstacle   |`=`     |the character hit points are decreased by `1`|
 |the character |`x`     |none                                         |
+
+# Diagram 1
+
+architecture
+
+![](arch.drawio.png)
