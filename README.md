@@ -114,6 +114,19 @@ configuration file or as command arguments.
 - A currently selected menu item is marked with the `*` character to the left
   of it.
 
+# Contribution
+
+## Develop
+
+Run the `nix-shell --run 'ghci -DWWW -isrc Main'` command to load WWW version
+into GHCi or the `nix-shell --run 'ghci -DCONS -isrc Main'` one to load the
+console one.
+
+## Deploy
+
+Run the `nix-build -A www` command to build WWW version or the `nix-build -A
+cons` one to build the console one.
+
 ---
 
 ## Table 1
