@@ -62,6 +62,8 @@ data Cell = Obstacle
           | LivingEnemy
           | DeadEnemy
           | BerserkerOrb
+          | BronzeCoin
+          | GoldCoin
           deriving (Eq, Show)
 
 data GenerationState = GenerationState { _generator :: StdGen
@@ -137,6 +139,8 @@ generateRow = do
     newRow <- trail trailPartColumnIndices
            <$> (scatter Pass
                 =<< scatter BerserkerOrb
+                =<< scatter BronzeCoin
+                =<< scatter GoldCoin
                 =<< lift generateObstacleRow
                )
     let middleCell = width `div` 2
@@ -673,5 +677,7 @@ getTailLength track' = runReader initialise defaultConfiguration
     generator' = mkStdGen 0
 
 cellToProbability :: Cell -> Probability
-cellToProbability BerserkerOrb = 0.5
-cellToProbability _ = 1
+cellToProbability BerserkerOrb = 0.1
+cellToProbability BronzeCoin = 1
+cellToProbability GoldCoin = 0.5
+cellToProbability _ = 0

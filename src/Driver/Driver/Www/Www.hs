@@ -137,6 +137,8 @@ cellToCol Obstacle = "white"
 cellToCol Pass = "gray"
 cellToCol TrailPart = "white"
 cellToCol BerserkerOrb = "orange"
+cellToCol BronzeCoin = "brown"
+cellToCol GoldCoin = "gold"
 
 cellToGeom :: Cell -> JSM (Maybe JSVal)
 cellToGeom cell = do
@@ -148,6 +150,8 @@ cellToGeom cell = do
        -> Just <$> newBoxGeom 1 1 1
        | cell == BerserkerOrb
        -> Just <$> newSphereGeom 0.3
+       | cell `elem` [BronzeCoin, GoldCoin]
+       -> Just <$> newSphereGeom 0.2
        | otherwise
        -> return Nothing
 
@@ -573,11 +577,13 @@ upd globStateRef wwwStateRef (Act (Signal (FlowSignal Progress))) = do
     conf <- ask
     let sig = FlowSignal Progress
     prevCoreState <- lift $ use core
+    prevScore <- use $ core . score
     nextCoreState <- reflect sig prevCoreState
     trackPieceCap <- asks (^. preferences
                            . trackPieceCapacity
                            . to (fromIntegral @Natural @Int)
                           )
+    rowCrossingScoreBonus' <- asks (^. options . rowCrossingScoreBonus)
     lift $ do
         prevCharRow <- use (core . character . position . unPosition . _1)
         core .= nextCoreState
@@ -607,14 +613,17 @@ upd globStateRef wwwStateRef (Act (Signal (FlowSignal Progress))) = do
                     modifyIORef globStateRef (& characterHitsCount %~ (+ 1))
         currCharSuperpower <- use $ core . character . superpower
         currTrackPiece <- use (core . track . rows . to (take trackPieceCap))
+        nextScore <- use $ core . score
         scheduleIO_ $ do
             let (charXPos, charZPos) = cellToPos conf charRow charCol
             WwwState {..} <- liftIO $ readIORef wwwStateRef
             _moveChar charXPos charZPos
             let bersSuperpowerOn = case currCharSuperpower of
-                                Just (BerserkerSuperpower _) -> True
-                                Nothing -> False
-            when bersSuperpowerOn $ _drawTrackPiece currTrackPiece
+                                       Just (BerserkerSuperpower _) -> True
+                                       Nothing -> False
+                coinCollected = nextScore == prevScore + rowCrossingScoreBonus'
+            when (bersSuperpowerOn || coinCollected) $ do
+                _drawTrackPiece currTrackPiece
             _render'
 upd _ _ (Act (Signal (PlayerSignal _))) = pure ()
 upd _ _ (MisoAct TogglePauseMode) = flow . paused %= not

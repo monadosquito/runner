@@ -20,6 +20,8 @@ instance Show RndredTrackCell where
     show (RndredTrackCell LivingEnemy) = "K"
     show (RndredTrackCell DeadEnemy) = "%"
     show (RndredTrackCell BerserkerOrb) = "*"
+    show (RndredTrackCell BronzeCoin) = "o"
+    show (RndredTrackCell GoldCoin) = "O"
 
 newtype RndredTrackLines = RndredTrackLines [[Cell]]
 instance Show RndredTrackLines where

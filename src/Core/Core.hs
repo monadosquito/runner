@@ -65,6 +65,7 @@ reflect (FlowSignal Progress) core = do
         currentSuperpower <- use $ character . superpower
         let berserkerSuperpowerOn = is (_Just . _BerserkerSuperpower)
                                        currentSuperpower
+        score += toPickScoreBonus nextCell
         when berserkerSuperpowerOn $ do
             leftNextCell <- gets (^? track
                                   . rows
@@ -78,9 +79,8 @@ reflect (FlowSignal Progress) core = do
                                   )
             track . rows . ix nextRow . ix (nextColumn - 1) .= TrailPart
             track . rows . ix nextRow . ix (nextColumn + 1) .= TrailPart
-            score += cellDestructionScoreBonus nextCell
-            score += cellDestructionScoreBonus leftNextCell
-            score += cellDestructionScoreBonus rightNextCell
+            score += toDestructionScoreBonus leftNextCell
+            score += toDestructionScoreBonus rightNextCell
         get
 reflect (PlayerSignal signal) coreState = do
     conf <- ask
@@ -117,7 +117,8 @@ reflect (PlayerSignal signal) coreState = do
             track . rows . ix previousRow . ix previousColumn .= TrailPart
             track . rows . ix nextRow . ix nextColumn .= Character
             when berserkerBonusAheadChar $ do
-                character . superpower .= Just (BerserkerSuperpower 10)
+                character . superpower .= Just berserkerSuperpower
+            score += toPickScoreBonus nextCell
            | signal `elem` [SwingLeft, SwingRight] -> do
             let swingSide = case signal of
                                 SwingLeft -> -1
@@ -142,6 +143,11 @@ initialiseCoreState trackState = do
     let initialScore = 0
     return $ CoreState characterState initialScore trackState
     
-cellDestructionScoreBonus :: Maybe Cell -> Natural
-cellDestructionScoreBonus (Just LivingEnemy) = 20
-cellDestructionScoreBonus _ = 0
+toDestructionScoreBonus :: Maybe Cell -> Natural
+toDestructionScoreBonus (Just LivingEnemy) = 20
+toDestructionScoreBonus _ = 0
+
+toPickScoreBonus :: Maybe Cell -> Natural
+toPickScoreBonus (Just BronzeCoin) = 5
+toPickScoreBonus (Just GoldCoin) = 10
+toPickScoreBonus _ = 0
