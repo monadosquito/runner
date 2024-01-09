@@ -22,10 +22,7 @@ import Numeric.Natural
 
 flow1 :: Monad m => ReaderT Configuration m (Flow r ())
 flow1 = do
-    characterProgressSpeed' <- asks (^. options
-                                     . trackStartPartLength
-                                     . to (fromIntegral @Natural @Float)
-                                    )
+    characterProgressSpeed' <- asks (^. options . characterProgressSpeed)
     trackPartCapacity' <- asks (^. preferences
                                 . trackPieceCapacity
                                 . to (fromIntegral @Natural @Int)
