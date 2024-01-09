@@ -89,7 +89,6 @@ reflect (PlayerSignal signal)
         return $ CoreState nextCharacterState previousScore nextTrackState
        | signal `elem` [SwingLeft, SwingRight] -> do
         enemyKillingScoreBonus' <- asks (^. options . enemyKillingScoreBonus)
-        -- let swingSide = fromEnum $ signalToSide signal
         let swingSide = case signal of
                             SwingLeft -> -1
                             SwingRight -> 1
