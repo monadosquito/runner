@@ -125,7 +125,10 @@ draw = do
                     _
                     _
                     _
-                    (CoreState (CharacterState hp _) score' trackState)
+                    (CoreState (CharacterState hp _ superpower')
+                               score'
+                               trackState
+                    )
           )
             =
             let trackPiece = trackState ^. rows . to (take trackPieceCap)
@@ -135,6 +138,13 @@ draw = do
                                             . RndredTrackLines
                                             $ trackPiece
                                        )
+                           <=> case superpower' of
+                                   Just (BerserkerSuperpower remRows)
+                                       ->
+                                       hCenter (str $ "ARMAR: " ++ show remRows)
+                                   Nothing
+                                       ->
+                                       emptyWidget
                            <=> hCenter (str $ "HP: " ++ show hp)
                 ]
         f (LocState (Just KBindsPage) kBinds' kBindsAdded' _ slctMenuItemIx' _)

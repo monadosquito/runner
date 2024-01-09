@@ -136,6 +136,7 @@ cellToCol LivingEnemy = "red"
 cellToCol Obstacle = "white"
 cellToCol Pass = "gray"
 cellToCol TrailPart = "white"
+cellToCol BerserkerOrb = "orange"
 
 cellToGeom :: Cell -> JSM (Maybe JSVal)
 cellToGeom cell = do
@@ -145,6 +146,8 @@ cellToGeom cell = do
        -> Just <$> newSphereGeom 0.1
        | cell == Obstacle
        -> Just <$> newBoxGeom 1 1 1
+       | cell == BerserkerOrb
+       -> Just <$> newSphereGeom 0.3
        | otherwise
        -> return Nothing
 
@@ -571,6 +574,10 @@ upd globStateRef wwwStateRef (Act (Signal (FlowSignal Progress))) = do
     let sig = FlowSignal Progress
     prevCoreState <- lift $ use core
     nextCoreState <- reflect sig prevCoreState
+    trackPieceCap <- asks (^. preferences
+                           . trackPieceCapacity
+                           . to (fromIntegral @Natural @Int)
+                          )
     lift $ do
         prevCharRow <- use (core . character . position . unPosition . _1)
         core .= nextCoreState
@@ -598,10 +605,16 @@ upd globStateRef wwwStateRef (Act (Signal (FlowSignal Progress))) = do
                                                . (& characterStuck .~ False)
                 when charHit $ do
                     modifyIORef globStateRef (& characterHitsCount %~ (+ 1))
+        currCharSuperpower <- use $ core . character . superpower
+        currTrackPiece <- use (core . track . rows . to (take trackPieceCap))
         scheduleIO_ $ do
             let (charXPos, charZPos) = cellToPos conf charRow charCol
             WwwState {..} <- liftIO $ readIORef wwwStateRef
             _moveChar charXPos charZPos
+            let bersSuperpowerOn = case currCharSuperpower of
+                                Just (BerserkerSuperpower _) -> True
+                                Nothing -> False
+            when bersSuperpowerOn $ _drawTrackPiece currTrackPiece
             _render'
 upd _ _ (Act (Signal (PlayerSignal _))) = pure ()
 upd _ _ (MisoAct TogglePauseMode) = flow . paused %= not

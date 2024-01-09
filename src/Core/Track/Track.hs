@@ -55,7 +55,13 @@ newtype Range a = Range (a, a)
 newtype Offset = Offset (ColumnIndex, ColumnIndex)
 
 
-data Cell = Obstacle | TrailPart | Pass | Character | LivingEnemy | DeadEnemy
+data Cell = Obstacle
+          | TrailPart
+          | Pass
+          | Character
+          | LivingEnemy
+          | DeadEnemy
+          | BerserkerOrb
           deriving (Eq, Show)
 
 data GenerationState = GenerationState { _generator :: StdGen
@@ -129,7 +135,10 @@ generateRow = do
                     <$> asks (^. options . trackStartPartLength)
     trailPartColumnIndices <- selectNextTrailPartColumns
     newRow <- trail trailPartColumnIndices
-           <$> (scatter Pass =<< lift generateObstacleRow)
+           <$> (scatter Pass
+                =<< scatter BerserkerOrb
+                =<< lift generateObstacleRow
+               )
     let middleCell = width `div` 2
         setCell cell index' = track . rows . _head . element index'' .= cell
           where
@@ -401,8 +410,6 @@ interpret' (Free track') = do
                                                                    previousGenerator
                     generator .= nextGenerator
                     interpret' $ staticLengthFinitePart length'
-                _ -> do
-                    return ()
         Just EitherSequence -> do
             eitherSequences . _head %= (*> Free (Pure () <$ track'))
         Just (RepeatedSequence _) -> do
@@ -475,19 +482,31 @@ scatter :: Monad m
 scatter cell row = do
     difficultyLevel' <- use $ track . difficulty . level
     width <- asks (^. options . trackWidth)
-    let passesCount = fromIntegral @Natural @Int $ width - difficultyLevel'
-    passColumns <- replicateM passesCount
-                              $ fromIntegral @Natural @Int
-                                <$> generatePassColumn
-    let scatteredRow = zipWith (\i previousCell
-                                ->
-                                if i `elem` passColumns
-                                then cell
-                                else previousCell
-                               )
-                               [0..length row - 1]
-                               row
-    return scatteredRow
+    previousGenerator <- use generator
+    let (probability, nextGenerator) = randomR (0 :: Float, 1 :: Float)
+                                               previousGenerator
+        cellProbability = cellToProbability cell
+    if probability <= cellProbability
+    then do
+        generator .= nextGenerator
+        let maxCount = fromIntegral @Natural @Int $ width - difficultyLevel'
+            minCount = 1 :: Int
+            (count, nextGenerator') = randomR (minCount, maxCount)
+                                              previousGenerator
+        generator .= nextGenerator'
+        columns <- replicateM count $ fromIntegral @Natural @Int
+                <$> generatePassColumn
+        let scatteredRow = zipWith (\i previousCell
+                                    ->
+                                    if i `elem` columns
+                                    then cell
+                                    else previousCell
+                                   )
+                                   [0..length row - 1]
+                                   row
+        return scatteredRow
+    else do
+        return row
 
 withDifficultyLevel :: DifficultyLevel -> Track
 withDifficultyLevel level'
@@ -652,3 +671,7 @@ getTailLength track' = runReader initialise defaultConfiguration
                                                                 initialState
          State.execStateT (interpret' track') initialGenerationState
     generator' = mkStdGen 0
+
+cellToProbability :: Cell -> Probability
+cellToProbability BerserkerOrb = 0.5
+cellToProbability _ = 1

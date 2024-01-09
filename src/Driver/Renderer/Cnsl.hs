@@ -19,6 +19,7 @@ instance Show RndredTrackCell where
     show (RndredTrackCell Character) = "x"
     show (RndredTrackCell LivingEnemy) = "K"
     show (RndredTrackCell DeadEnemy) = "%"
+    show (RndredTrackCell BerserkerOrb) = "*"
 
 newtype RndredTrackLines = RndredTrackLines [[Cell]]
 instance Show RndredTrackLines where

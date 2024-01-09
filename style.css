@@ -107,3 +107,20 @@ body {
     display: inline-block;
     opacity: 0.5;
 }
+
+.bon-rem-rows-cnt {
+    color: gainsboro;
+    font-size: 4vh;
+    position: absolute;
+    left: 50%;
+    bottom: 0px;
+    right: 50%;
+}
+
+.char-state {
+    display: flex;
+}
+
+.shield_plated {
+    background-color: dimgrey;
+}

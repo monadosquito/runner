@@ -60,7 +60,7 @@ defaultOptions = Options { _trackWidth = 11
                          , _trackDifficultyLevel = _trackWidth defaultOptions
                                                  `div` 2
                          , _trackStartPartLength = 3
-                         , _characterProgressSpeed = 2
+                         , _characterProgressSpeed = 5
                          , _characterHitPoints = 10
                          , _rowCrossingScoreBonus = 1
                          , _enemyKillingScoreBonus = 10

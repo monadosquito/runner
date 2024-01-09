@@ -95,3 +95,6 @@ instance Aeson.FromJSONKey PlayerSignal where
 instance Aeson.ToJSON Preferences where
 instance Aeson.ToJSON PlayerSignal where
 instance Aeson.ToJSONKey PlayerSignal where
+instance Aeson.FromJSON Superpower where
+instance Aeson.ToJSON Superpower where
+deriving instance Gen.Generic Superpower

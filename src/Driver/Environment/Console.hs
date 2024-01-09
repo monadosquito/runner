@@ -53,7 +53,8 @@ instance Environment Console IO where
         argPrefs <- execParser
                  $ info (readPrefs defaultPreferences <**> helper) fullDesc
         fileConf <- catch @IOException
-                          (deserialisePreferences parser
+                          (maybe defaultPreferences id
+                           . deserialisePreferences parser
                            <$> ByteString.readFile (_configurationFilePath argPrefs)
                           )
                  . const
