@@ -1,3 +1,5 @@
+* Refresh page several times so that it works.
+  
 # Play
 
 1. Navigate through the menus using the [menu actions key
